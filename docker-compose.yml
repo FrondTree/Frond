@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: frond
+      POSTGRES_PASSWORD: frond
+      POSTGRES_DB: frond
+    ports:
+      - "5433:5432"  # host 5433 — avoids conflict if local Postgres uses 5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frond"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: frond-dev-master-key
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch_data:/meili_data
+
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://frond:frond@postgres:5432/frond?sslmode=disable
+      API_PORT: "8080"
+      API_BASE_URL: http://localhost:8080
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3001
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: http://localhost:8080/v1/auth/google/callback
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_PATH: /data/artifacts
+      STORAGE_PUBLIC_URL: http://localhost:8080/artifacts
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_API_KEY: frond-dev-master-key
+    volumes:
+      - api_artifacts:/data/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  meilisearch_data:
+  api_artifacts:

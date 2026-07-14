@@ -1,0 +1,37 @@
+name: Publish Frond Docs
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install Frond CLI
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @frond/cli build
+          npm install -g ./apps/cli
+
+      - name: Validate
+        run: frond validate
+
+      - name: Publish
+        env:
+          FROND_API_URL: ${{ secrets.FROND_API_URL }}
+        run: |
+          frond docs publish --project-id ${{ secrets.FROND_PROJECT_ID }}
+        # Set FROND_API_KEY via: echo "FROND_API_KEY=..." >> $GITHUB_ENV
+        # Or configure ~/.frond/credentials.json in a prior setup step

@@ -1,0 +1,32 @@
+{
+  "name": "@frond/cli",
+  "version": "0.1.0",
+  "description": "Frond CLI — developer documentation platform",
+  "type": "module",
+  "bin": {
+    "frond": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@frond/compiler": "workspace:*",
+    "@frond/config": "workspace:*",
+    "@frond/sdk-generator": "workspace:*",
+    "chalk": "^5.4.1",
+    "commander": "^12.1.0",
+    "open": "^10.1.0",
+    "ora": "^8.1.1",
+    "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/tar": "^6.1.13",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

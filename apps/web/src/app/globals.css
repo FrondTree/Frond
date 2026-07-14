@@ -1,0 +1,14 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+:root {
+  --frond-primary: #6366f1;
+  --frond-bg: #0a0a0f;
+  --frond-surface: #12121a;
+  --frond-border: #1e1e2e;
+}
+
+body {
+  @apply bg-[var(--frond-bg)] text-zinc-100 antialiased;
+}
