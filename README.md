@@ -39,14 +39,43 @@ cp .env.example .env
 docker compose up -d postgres meilisearch
 ```
 
-### 3. Run database migrations
+### 3. Install dependencies
 
 ```bash
-cd services/api
-go run ./cmd/migrate
+pnpm install
 ```
 
-### 4. Start Go API
+### 4. Database (Prisma + Postgres)
+
+Local development uses **Prisma** for schema migrations and seeding. The Go API still reads/writes the same Postgres tables via pgx.
+
+```bash
+pnpm db:migrate   # apply migrations
+pnpm db:seed      # create demo user + org
+```
+
+Or in one step:
+
+```bash
+make db-setup
+```
+
+If you previously used goose migrations, reset the local DB first:
+
+```bash
+pnpm db:reset
+```
+
+**Demo login** (no Google setup required):
+
+| Field | Value |
+|-------|-------|
+| Username | `demo` |
+| Password | `demo` |
+
+Sign in at http://localhost:3000/login — Google sign-in remains available when OAuth is configured.
+
+### 5. Start Go API
 
 ```bash
 cd services/api
@@ -54,14 +83,13 @@ go run ./cmd/server
 # API at http://localhost:8080
 ```
 
-### 5. Install dependencies & build
+### 6. Build
 
 ```bash
-pnpm install
 pnpm build
 ```
 
-### 6. Start web apps
+### 7. Start web apps
 
 ```bash
 # Terminal 1 — landing + dashboard
@@ -89,7 +117,7 @@ frond init
 frond validate
 frond doctor
 frond docs dev          # local manifest server on :3002
-frond login             # Google OAuth
+frond login             # Google OAuth (or use demo credentials in dashboard)
 frond generate          # SDKs to sdks/
 frond docs publish --project-id <uuid>
 frond diff --from v1 --to v2
@@ -109,7 +137,19 @@ my-api/
 └── .github/workflows/   # see publish-docs.example.yml
 ```
 
-## Google OAuth setup
+## Authentication
+
+### Demo account (local testing)
+
+| Field | Value |
+|-------|-------|
+| Username | `demo` |
+| Password | `demo` |
+| Email | `demo@frond.dev` |
+
+Use **Sign in with demo account** at http://localhost:3000/login. Re-seed anytime with `pnpm db:seed`.
+
+### Google OAuth setup
 
 1. Create a Google Cloud OAuth 2.0 Client ID
 2. Add redirect URI: `http://localhost:8080/v1/auth/google/callback`
@@ -161,7 +201,7 @@ my-api/
 - [x] @frond/cli (init, validate, doctor, docs dev, publish, generate, diff, login)
 - [x] Config parser + OpenAPI compiler
 - [x] SDK generator (TypeScript, Python)
-- [x] Next.js landing + dashboard with Google login
+- [x] Next.js landing + dashboard with demo login + Google OAuth
 - [x] Next.js docs renderer with playground
 - [x] Docker Compose + CI
 

@@ -7,7 +7,13 @@ down:
 	docker compose down
 
 migrate:
-	cd services/api && go run ./cmd/migrate
+	pnpm db:migrate
+
+seed:
+	pnpm db:seed
+
+db-setup:
+	pnpm db:migrate && pnpm db:seed
 
 api:
 	cd services/api && go run ./cmd/server

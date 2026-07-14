@@ -16,6 +16,50 @@ type AuthHandler struct {
 	Store *store.Store
 }
 
+type LoginRequest struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req LoginRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+
+	login := req.Username
+	if login == "" {
+		login = req.Email
+	}
+	if login == "" || req.Password == "" {
+		writeError(w, http.StatusBadRequest, "missing_credentials", "username/email and password required")
+		return
+	}
+
+	user, err := h.Store.AuthenticateUser(r.Context(), login, req.Password)
+	if err != nil {
+		if errors.Is(err, store.ErrInvalidCredentials) {
+			writeError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid username or password")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	jwt, err := h.Auth.IssueJWT(user.ID, user.Email, 7*24*time.Hour)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "token_error", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"token": jwt,
+		"user":  user,
+	})
+}
+
 func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	state, err := auth.GenerateState()
 	if err != nil {

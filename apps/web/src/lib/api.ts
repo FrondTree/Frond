@@ -5,6 +5,12 @@ export function getToken(): string | null {
   return localStorage.getItem("frond_token");
 }
 
+export function clearSession(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("frond_token");
+  localStorage.removeItem("frond_selected_org");
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {

@@ -72,6 +72,7 @@ func New(d Deps) http.Handler {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
+			r.Post("/login", authHandler.Login)
 			r.Get("/google", authHandler.GoogleLogin)
 			r.Get("/google/callback", authHandler.GoogleCallback)
 			r.Get("/github/callback", githubHandler.Callback)

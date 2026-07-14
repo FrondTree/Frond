@@ -24,6 +24,7 @@ import (
 
 func main() {
 	_ = godotenv.Load()
+	_ = godotenv.Load("../../.env")
 
 	cfg, err := config.Load()
 	if err != nil {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { apiFetch, type DriftAlert, type HealthSnapshot } from "@/lib/api";
 
@@ -42,11 +42,7 @@ export default function HealthPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-[var(--frond-border)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link href="/" className="text-xl font-bold">Frond</Link>
-        </div>
-      </header>
+      <DashboardHeader />
       <main className="mx-auto max-w-6xl px-6 py-8">
         <DashboardNav />
         <div className="mt-8 flex items-center justify-between">

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/frond-dev/frond/services/api/internal/auth"
 	"github.com/frond-dev/frond/services/api/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,9 +15,10 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("not found")
-	ErrAlreadyExists = errors.New("already exists")
-	ErrForbidden     = errors.New("forbidden")
+	ErrNotFound           = errors.New("not found")
+	ErrAlreadyExists      = errors.New("already exists")
+	ErrForbidden          = errors.New("forbidden")
+	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
 type Store struct {
@@ -37,9 +39,9 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, googleID, email, name, ava
 			avatar_url = EXCLUDED.avatar_url,
 			google_id = COALESCE(users.google_id, EXCLUDED.google_id),
 			updated_at = NOW()
-		RETURNING id, email, name, avatar_url, google_id, created_at, updated_at
+		RETURNING id, email, COALESCE(username, ''), name, avatar_url, google_id, created_at, updated_at
 	`, email, name, avatar, googleID).Scan(
-		&u.ID, &u.Email, &u.Name, &u.AvatarURL, &u.GoogleID, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Email, &u.Username, &u.Name, &u.AvatarURL, &u.GoogleID, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -50,13 +52,37 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, googleID, email, name, ava
 func (s *Store) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	var u models.User
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, email, name, avatar_url, google_id, created_at, updated_at
+		SELECT id, email, COALESCE(username, ''), name, avatar_url, google_id, created_at, updated_at
 		FROM users WHERE id = $1
-	`, id).Scan(&u.ID, &u.Email, &u.Name, &u.AvatarURL, &u.GoogleID, &u.CreatedAt, &u.UpdatedAt)
+	`, id).Scan(&u.ID, &u.Email, &u.Username, &u.Name, &u.AvatarURL, &u.GoogleID, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	return &u, err
+}
+
+func (s *Store) AuthenticateUser(ctx context.Context, login, password string) (*models.User, error) {
+	var u models.User
+	var passwordHash *string
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, email, COALESCE(username, ''), name, avatar_url, google_id, password_hash, created_at, updated_at
+		FROM users WHERE email = $1 OR username = $1
+	`, login).Scan(
+		&u.ID, &u.Email, &u.Username, &u.Name, &u.AvatarURL, &u.GoogleID, &passwordHash, &u.CreatedAt, &u.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvalidCredentials
+	}
+	if err != nil {
+		return nil, err
+	}
+	if passwordHash == nil || *passwordHash == "" {
+		return nil, ErrInvalidCredentials
+	}
+	if !auth.CheckPassword(*passwordHash, password) {
+		return nil, ErrInvalidCredentials
+	}
+	return &u, nil
 }
 
 func (s *Store) CreateOrganization(ctx context.Context, userID uuid.UUID, name, slug string) (*models.Organization, error) {

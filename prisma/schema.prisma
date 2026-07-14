@@ -1,0 +1,368 @@
+// Frond — Prisma schema (local Postgres)
+// Go API reads/writes the same tables via pgx.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique
+  username     String?  @unique
+  name         String   @default("")
+  avatarUrl    String   @default("") @map("avatar_url")
+  googleId     String?  @unique @map("google_id")
+  passwordHash String?  @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  organizationMembers OrganizationMember[]
+  apiKeys           ApiKey[]
+  githubConnections GitHubConnection[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  plan      String   @default("free")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members              OrganizationMember[]
+  projects             Project[]
+  apiKeys              ApiKey[]
+  githubConnection     GitHubConnection?
+  connectedRepos       ConnectedRepository[]
+  scanJobs             ScanJob[]
+  kgServices           KgService[]
+  kgApis               KgApi[]
+  kgDependencies       KgDependency[]
+  kgAdrs               KgAdr[]
+  kgRelationships      KgRelationship[]
+  docDriftAlerts       DocDriftAlert[]
+  docHealthSnapshots   DocHealthSnapshot[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  role           String   @default("member")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
+}
+
+model ApiKey {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String    @default("default")
+  keyHash        String    @unique @map("key_hash")
+  keyPrefix      String    @map("key_prefix")
+  lastUsedAt     DateTime? @map("last_used_at")
+  expiresAt      DateTime? @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+model Project {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  slug           String
+  description    String   @default("")
+  visibility     String   @default("public")
+  config         Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  docVersions       DocVersion[]
+  deployments       Deployment[]
+  connectedRepos    ConnectedRepository[]
+  kgServices        KgService[]
+  docDriftAlerts    DocDriftAlert[]
+
+  @@unique([organizationId, slug])
+  @@map("projects")
+}
+
+model DocVersion {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  versionLabel String   @map("version_label")
+  openapiHash  String   @default("") @map("openapi_hash")
+  bundlePath   String   @map("bundle_path")
+  manifest     Json     @default("{}")
+  isLatest     Boolean  @default(false) @map("is_latest")
+  publishedAt  DateTime @default(now()) @map("published_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deployments Deployment[]
+
+  @@index([projectId])
+  @@map("doc_versions")
+}
+
+model Deployment {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  docVersionId String   @map("doc_version_id") @db.Uuid
+  url          String
+  customDomain String?  @map("custom_domain")
+  status       String   @default("active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  docVersion DocVersion @relation(fields: [docVersionId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("deployments")
+}
+
+model OAuthState {
+  state       String   @id
+  redirectUri String   @default("") @map("redirect_uri")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("oauth_states")
+}
+
+model GitHubConnection {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @unique @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  githubUserId   BigInt   @map("github_user_id")
+  githubLogin    String   @map("github_login")
+  accessToken    String   @map("access_token")
+  tokenScope     String   @default("") @map("token_scope")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectedRepos ConnectedRepository[]
+
+  @@map("github_connections")
+}
+
+model ConnectedRepository {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String    @map("organization_id") @db.Uuid
+  githubConnectionId String    @map("github_connection_id") @db.Uuid
+  githubRepoId       BigInt    @map("github_repo_id")
+  fullName           String    @map("full_name")
+  name               String
+  defaultBranch      String    @default("main") @map("default_branch")
+  htmlUrl            String    @default("") @map("html_url")
+  description        String    @default("")
+  language           String    @default("")
+  linkedProjectId    String?   @map("linked_project_id") @db.Uuid
+  scanStatus         String    @default("pending") @map("scan_status")
+  lastScannedAt      DateTime? @map("last_scanned_at")
+  lastScanError      String?   @map("last_scan_error")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  githubConnection GitHubConnection @relation(fields: [githubConnectionId], references: [id], onDelete: Cascade)
+  linkedProject    Project?         @relation(fields: [linkedProjectId], references: [id], onDelete: SetNull)
+  scanJobs         ScanJob[]
+  kgServices       KgService[]
+  kgApis           KgApi[]
+  kgAdrs           KgAdr[]
+  docDriftAlerts   DocDriftAlert[]
+
+  @@unique([organizationId, githubRepoId])
+  @@index([organizationId])
+  @@map("connected_repositories")
+}
+
+model ScanJob {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId   String    @map("repository_id") @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  status         String    @default("queued")
+  triggerType    String    @default("manual") @map("trigger_type")
+  filesScanned   Int       @default(0) @map("files_scanned")
+  errorMessage   String?   @map("error_message")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  repository   ConnectedRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("scan_jobs")
+}
+
+model KgService {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  repositoryId    String   @unique @map("repository_id") @db.Uuid
+  name            String
+  slug            String
+  description     String   @default("")
+  language        String   @default("")
+  framework       String   @default("")
+  owners          Json     @default("[]")
+  metadata        Json     @default("{}")
+  linkedProjectId String?  @map("linked_project_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repository   ConnectedRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  linkedProject Project?           @relation(fields: [linkedProjectId], references: [id], onDelete: SetNull)
+  apis         KgApi[]
+  dependencies KgDependency[]
+  adrs         KgAdr[]
+  driftAlerts  DocDriftAlert[]
+
+  @@index([organizationId])
+  @@map("kg_services")
+}
+
+model KgApi {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  serviceId      String   @map("service_id") @db.Uuid
+  repositoryId   String   @map("repository_id") @db.Uuid
+  method         String
+  path           String
+  summary        String   @default("")
+  description    String   @default("")
+  operationId    String   @default("") @map("operation_id")
+  source         String   @default("openapi")
+  specPath       String   @default("") @map("spec_path")
+  documented     Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service      KgService           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  repository   ConnectedRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, method, path])
+  @@index([organizationId])
+  @@index([serviceId])
+  @@map("kg_apis")
+}
+
+model KgDependency {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  serviceId      String   @map("service_id") @db.Uuid
+  name           String
+  version        String   @default("")
+  depType        String   @default("package") @map("dep_type")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service      KgService    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, name, depType])
+  @@index([serviceId])
+  @@map("kg_dependencies")
+}
+
+model KgAdr {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  repositoryId   String   @map("repository_id") @db.Uuid
+  serviceId      String?  @map("service_id") @db.Uuid
+  adrNumber      String   @default("") @map("adr_number")
+  title          String
+  status         String   @default("accepted")
+  content        String   @default("")
+  filePath       String   @map("file_path")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repository   ConnectedRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  service      KgService?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@unique([repositoryId, filePath])
+  @@index([organizationId])
+  @@map("kg_adrs")
+}
+
+model KgRelationship {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  sourceType     String   @map("source_type")
+  sourceId       String   @map("source_id") @db.Uuid
+  targetType     String   @map("target_type")
+  targetId       String   @map("target_id") @db.Uuid
+  relationship   String
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceType, sourceId, targetType, targetId, relationship])
+  @@index([organizationId])
+  @@map("kg_relationships")
+}
+
+model DocDriftAlert {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  projectId      String?  @map("project_id") @db.Uuid
+  repositoryId   String?  @map("repository_id") @db.Uuid
+  serviceId      String?  @map("service_id") @db.Uuid
+  prNumber       Int?     @map("pr_number")
+  prUrl          String   @default("") @map("pr_url")
+  severity       String   @default("warning")
+  title          String
+  message        String
+  details        Json     @default("{}")
+  status         String   @default("open")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  repository   ConnectedRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  service      KgService?           @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@map("doc_drift_alerts")
+}
+
+model DocHealthSnapshot {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  score          Int      @default(0)
+  coveragePct    Int      @default(0) @map("coverage_pct")
+  apiTotal       Int      @default(0) @map("api_total")
+  apiDocumented  Int      @default(0) @map("api_documented")
+  stalePages     Int      @default(0) @map("stale_pages")
+  issues         Json     @default("[]")
+  computedAt     DateTime @default(now()) @map("computed_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, computedAt])
+  @@map("doc_health_snapshots")
+}
