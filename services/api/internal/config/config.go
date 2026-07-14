@@ -15,6 +15,10 @@ type Config struct {
 	GoogleClientID    string
 	GoogleClientSecret string
 	GoogleRedirectURL string
+	GitHubClientID    string
+	GitHubClientSecret string
+	GitHubRedirectURL string
+	GitHubWebhookSecret string
 	StorageType       string
 	StorageLocalPath  string
 	StoragePublicURL  string
@@ -33,6 +37,10 @@ func Load() (*Config, error) {
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/v1/auth/google/callback"),
+		GitHubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
+		GitHubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+		GitHubRedirectURL:  getEnv("GITHUB_REDIRECT_URL", "http://localhost:8080/v1/auth/github/callback"),
+		GitHubWebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
 		StorageType:        getEnv("STORAGE_TYPE", "local"),
 		StorageLocalPath:   getEnv("STORAGE_LOCAL_PATH", "./data/artifacts"),
 		StoragePublicURL:   getEnv("STORAGE_PUBLIC_URL", "http://localhost:8080/artifacts"),

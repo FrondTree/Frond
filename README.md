@@ -123,6 +123,38 @@ my-api/
 | [PHASE.md](./docs/PHASE.md) | Phased product design |
 | [ROADMAP.md](./docs/ROADMAP.md) | Full feature roadmap |
 
+## Phase 2 — Repository Intelligence
+
+- GitHub OAuth connect + repo selection
+- Background repo scanner (OpenAPI, package.json, go.mod, ADRs, CODEOWNERS, routes)
+- Knowledge graph (services, APIs, dependencies, ADRs)
+- Architecture explorer (React Flow)
+- Dependency explorer
+- Documentation health dashboard
+- PR drift alerts (GitHub webhook)
+- Unified search across services, APIs, ADRs
+
+### GitHub setup
+
+1. Create a GitHub OAuth App at https://github.com/settings/developers
+2. Authorization callback URL: `http://localhost:8080/v1/auth/github/callback`
+3. Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`
+4. Optional: configure webhook at `http://localhost:8080/v1/webhooks/github` for push/PR events
+
+### Phase 2 API endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/orgs/:slug/github/connect` | Start GitHub OAuth |
+| `GET /v1/orgs/:slug/github/repos` | List available repos |
+| `POST /v1/orgs/:slug/github/repos` | Connect repos for scanning |
+| `GET /v1/orgs/:slug/intelligence/architecture` | Architecture graph |
+| `GET /v1/orgs/:slug/intelligence/services` | Discovered services |
+| `GET /v1/orgs/:slug/intelligence/dependencies` | Dependency trees |
+| `GET /v1/orgs/:slug/intelligence/health` | Doc health score |
+| `GET /v1/orgs/:slug/intelligence/search?q=` | Unified search |
+| `GET /v1/orgs/:slug/intelligence/drift` | Drift alerts |
+
 ## Phase 1 status
 
 - [x] Go API (auth, orgs, projects, publish, search)
@@ -132,6 +164,17 @@ my-api/
 - [x] Next.js landing + dashboard with Google login
 - [x] Next.js docs renderer with playground
 - [x] Docker Compose + CI
+
+## Phase 2 status
+
+- [x] GitHub OAuth + repo connect
+- [x] Background repo scanner worker
+- [x] Knowledge graph (services, APIs, deps, ADRs)
+- [x] Architecture explorer (React Flow)
+- [x] Dependency explorer
+- [x] Documentation health dashboard
+- [x] PR drift alerts (webhook)
+- [x] Unified search (services, APIs, ADRs)
 
 ## License
 

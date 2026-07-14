@@ -1,0 +1,95 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("frond_token");
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  return res.json() as Promise<T>;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  role?: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface ConnectedRepo {
+  id: string;
+  full_name: string;
+  name: string;
+  scan_status: string;
+  language: string;
+  html_url: string;
+  linked_project_id?: string;
+}
+
+export interface KGService {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  language: string;
+  framework: string;
+  repository_name: string;
+  html_url: string;
+}
+
+export interface GraphNode {
+  id: string;
+  type: string;
+  label: string;
+  data: Record<string, unknown>;
+  position?: { x: number; y: number };
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relationship: string;
+  label?: string;
+}
+
+export interface ArchitectureGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface HealthSnapshot {
+  score: number;
+  coverage_pct: number;
+  api_total: number;
+  api_documented: number;
+  stale_pages: number;
+  issues: Array<{ severity: string; message: string }>;
+}
+
+export interface DriftAlert {
+  id: string;
+  title: string;
+  message: string;
+  severity: string;
+  pr_url: string;
+  created_at: string;
+}

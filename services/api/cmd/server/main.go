@@ -13,10 +13,12 @@ import (
 	"github.com/frond-dev/frond/services/api/internal/auth"
 	"github.com/frond-dev/frond/services/api/internal/config"
 	"github.com/frond-dev/frond/services/api/internal/db"
+	"github.com/frond-dev/frond/services/api/internal/graphstore"
 	"github.com/frond-dev/frond/services/api/internal/router"
 	"github.com/frond-dev/frond/services/api/internal/search"
 	"github.com/frond-dev/frond/services/api/internal/storage"
 	"github.com/frond-dev/frond/services/api/internal/store"
+	"github.com/frond-dev/frond/services/api/internal/worker"
 	"github.com/joho/godotenv"
 )
 
@@ -36,6 +38,7 @@ func main() {
 	defer pool.Close()
 
 	st := store.New(pool)
+	graph := graphstore.New(pool)
 	authSvc := auth.NewService(cfg.JWTSecret, cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
 
 	localStore, err := storage.NewLocalStore(cfg.StorageLocalPath, cfg.StoragePublicURL)
@@ -51,9 +54,13 @@ func main() {
 		log.Printf("search index warning: %v", err)
 	}
 
+	scanWorker := worker.New(graph, searchClient)
+	scanWorker.Start(ctx)
+
 	handler := router.New(router.Deps{
 		Config:  cfg,
 		Store:   st,
+		Graph:   graph,
 		Auth:    authSvc,
 		Storage: localStore,
 		Search:  searchClient,
