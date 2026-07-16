@@ -189,6 +189,26 @@ func (c *Client) GetPRFiles(ctx context.Context, owner, repo string, prNumber in
 	return files, nil
 }
 
+func (c *Client) CreatePRComment(ctx context.Context, owner, repo string, prNumber int, body string) error {
+	u := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments", owner, repo, prNumber)
+	payload, _ := json.Marshal(map[string]string{"body": body})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(string(payload)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("github comment %s: %s", resp.Status, strings.TrimSpace(string(b)))
+	}
+	return nil
+}
+
 func (c *Client) getJSON(ctx context.Context, url string, dest interface{}) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

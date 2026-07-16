@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/frond-dev/frond/services/api/internal/auth"
@@ -307,7 +309,11 @@ func (s *Store) PublishDocVersion(ctx context.Context, projectID uuid.UUID, vers
 		return nil, nil, err
 	}
 
-	url := fmt.Sprintf("https://%s.%s.frond.dev", p.Slug, org.Slug)
+	docsBase := os.Getenv("DOCS_PUBLIC_URL")
+	if docsBase == "" {
+		docsBase = "http://localhost:3001"
+	}
+	url := fmt.Sprintf("%s/%s/%s", strings.TrimRight(docsBase, "/"), org.Slug, p.Slug)
 	var dep models.Deployment
 	err = tx.QueryRow(ctx, `
 		INSERT INTO deployments (project_id, doc_version_id, url, status)
@@ -365,4 +371,180 @@ func (s *Store) ListDeployments(ctx context.Context, projectID uuid.UUID) ([]mod
 func (s *Store) CleanupExpiredStates(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM oauth_states WHERE created_at < $1`, time.Now().Add(-15*time.Minute))
 	return err
+}
+
+func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	var u models.User
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, email, COALESCE(username, ''), name, avatar_url, google_id, created_at, updated_at
+		FROM users WHERE lower(email) = lower($1)
+	`, email).Scan(&u.ID, &u.Email, &u.Username, &u.Name, &u.AvatarURL, &u.GoogleID, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &u, err
+}
+
+func (s *Store) ListOrgMembers(ctx context.Context, orgID uuid.UUID) ([]models.OrgMember, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.id, u.email, u.name, COALESCE(u.username, ''), om.role, om.created_at
+		FROM organization_members om
+		JOIN users u ON u.id = om.user_id
+		WHERE om.organization_id = $1
+		ORDER BY om.created_at ASC
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.OrgMember
+	for rows.Next() {
+		var m models.OrgMember
+		if err := rows.Scan(&m.UserID, &m.Email, &m.Name, &m.Username, &m.Role, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateOrgInvite(ctx context.Context, orgID, invitedBy uuid.UUID, email, role, token string, expiresAt time.Time) (*models.OrgInvite, error) {
+	if role == "" {
+		role = "member"
+	}
+	var inv models.OrgInvite
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO org_invites (organization_id, email, role, token, invited_by, expires_at)
+		VALUES ($1, lower($2), $3, $4, $5, $6)
+		RETURNING id, organization_id, email, role, token, invited_by, accepted_at, expires_at, created_at
+	`, orgID, email, role, token, invitedBy, expiresAt).Scan(
+		&inv.ID, &inv.OrganizationID, &inv.Email, &inv.Role, &inv.Token, &inv.InvitedBy, &inv.AcceptedAt, &inv.ExpiresAt, &inv.CreatedAt,
+	)
+	return &inv, err
+}
+
+func (s *Store) ListOrgInvites(ctx context.Context, orgID uuid.UUID) ([]models.OrgInvite, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, organization_id, email, role, token, invited_by, accepted_at, expires_at, created_at
+		FROM org_invites
+		WHERE organization_id = $1 AND accepted_at IS NULL AND expires_at > NOW()
+		ORDER BY created_at DESC
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.OrgInvite
+	for rows.Next() {
+		var inv models.OrgInvite
+		if err := rows.Scan(&inv.ID, &inv.OrganizationID, &inv.Email, &inv.Role, &inv.Token, &inv.InvitedBy, &inv.AcceptedAt, &inv.ExpiresAt, &inv.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, inv)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) AcceptOrgInvite(ctx context.Context, token string, userID uuid.UUID, userEmail string) (*models.Organization, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var inv models.OrgInvite
+	err = tx.QueryRow(ctx, `
+		SELECT id, organization_id, email, role, token, invited_by, accepted_at, expires_at, created_at
+		FROM org_invites WHERE token = $1 FOR UPDATE
+	`, token).Scan(
+		&inv.ID, &inv.OrganizationID, &inv.Email, &inv.Role, &inv.Token, &inv.InvitedBy, &inv.AcceptedAt, &inv.ExpiresAt, &inv.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if inv.AcceptedAt != nil || inv.ExpiresAt.Before(time.Now()) {
+		return nil, ErrForbidden
+	}
+	if !strings.EqualFold(inv.Email, userEmail) {
+		return nil, ErrForbidden
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO organization_members (organization_id, user_id, role)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role
+	`, inv.OrganizationID, userID, inv.Role)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE org_invites SET accepted_at = NOW() WHERE id = $1`, inv.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var org models.Organization
+	err = tx.QueryRow(ctx, `
+		SELECT id, name, slug, plan, created_at, updated_at FROM organizations WHERE id = $1
+	`, inv.OrganizationID).Scan(&org.ID, &org.Name, &org.Slug, &org.Plan, &org.CreatedAt, &org.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	org.Role = inv.Role
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return &org, nil
+}
+
+func (s *Store) SetDeploymentCustomDomain(ctx context.Context, projectID uuid.UUID, domain string) (*models.Deployment, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	var dep models.Deployment
+	err := s.pool.QueryRow(ctx, `
+		UPDATE deployments
+		SET custom_domain = NULLIF($2, '')
+		WHERE id = (
+			SELECT id FROM deployments WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1
+		)
+		RETURNING id, project_id, doc_version_id, url, custom_domain, status, created_at
+	`, projectID, domain).Scan(
+		&dep.ID, &dep.ProjectID, &dep.DocVersionID, &dep.URL, &dep.CustomDomain, &dep.Status, &dep.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &dep, err
+}
+
+func (s *Store) ResolveCustomDomain(ctx context.Context, host string) (*models.Organization, *models.Project, *models.Deployment, error) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	if i := strings.Index(host, "/"); i >= 0 {
+		host = host[:i]
+	}
+	var dep models.Deployment
+	var org models.Organization
+	var p models.Project
+	err := s.pool.QueryRow(ctx, `
+		SELECT d.id, d.project_id, d.doc_version_id, d.url, d.custom_domain, d.status, d.created_at,
+		       o.id, o.name, o.slug, o.plan, o.created_at, o.updated_at,
+		       p.id, p.organization_id, p.name, p.slug, p.description, p.visibility, p.config, p.created_at, p.updated_at
+		FROM deployments d
+		JOIN projects p ON p.id = d.project_id
+		JOIN organizations o ON o.id = p.organization_id
+		WHERE lower(d.custom_domain) = $1 AND d.status = 'active'
+		ORDER BY d.created_at DESC
+		LIMIT 1
+	`, host).Scan(
+		&dep.ID, &dep.ProjectID, &dep.DocVersionID, &dep.URL, &dep.CustomDomain, &dep.Status, &dep.CreatedAt,
+		&org.ID, &org.Name, &org.Slug, &org.Plan, &org.CreatedAt, &org.UpdatedAt,
+		&p.ID, &p.OrganizationID, &p.Name, &p.Slug, &p.Description, &p.Visibility, &p.Config, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil, nil, ErrNotFound
+	}
+	return &org, &p, &dep, err
 }

@@ -102,8 +102,11 @@ pnpm --filter @frond/docs dev
 | App | URL |
 |-----|-----|
 | Landing + Dashboard | http://localhost:3000 |
-| Docs renderer | http://localhost:3001 |
+| Docs renderer | http://localhost:3001/:org/:project |
 | Go API | http://localhost:8080 |
+
+> **Note:** Creating an org/project in the dashboard does **not** publish docs. The docs site only shows content after `frond docs publish --project-id <uuid>` (or an equivalent publish API call). Until then, `http://localhost:3001/:org/:project` shows “Docs not published yet”.
+
 
 ## CLI usage
 

@@ -74,7 +74,161 @@ func IsADRPath(path string) bool {
 
 func IsDependencyFile(path string) bool {
 	lower := strings.ToLower(path)
-	return lower == "package.json" || lower == "go.mod" || lower == "requirements.txt" || lower == "pyproject.toml" || lower == "cargo.toml"
+	base := lower
+	if i := strings.LastIndex(lower, "/"); i >= 0 {
+		base = lower[i+1:]
+	}
+	switch base {
+	case "package.json", "go.mod", "requirements.txt", "pyproject.toml", "cargo.toml", "dockerfile":
+		return true
+	}
+	return strings.HasPrefix(base, "dockerfile.")
+}
+
+func IsDockerfile(path string) bool {
+	lower := strings.ToLower(path)
+	base := lower
+	if i := strings.LastIndex(lower, "/"); i >= 0 {
+		base = lower[i+1:]
+	}
+	return base == "dockerfile" || strings.HasPrefix(base, "dockerfile.")
+}
+
+func ParseRequirementsTxt(content string) []Dependency {
+	var deps []Dependency
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "-") {
+			continue
+		}
+		name := line
+		version := ""
+		for _, sep := range []string{"==", ">=", "<=", "~=", "!="} {
+			if i := strings.Index(line, sep); i > 0 {
+				name = strings.TrimSpace(line[:i])
+				version = strings.TrimSpace(line[i:])
+				break
+			}
+		}
+		deps = append(deps, Dependency{Name: name, Version: version, Type: "python"})
+	}
+	return deps
+}
+
+func ParsePyproject(content string) []Dependency {
+	var deps []Dependency
+	inDeps := false
+	for _, line := range strings.Split(content, "\n") {
+		trim := strings.TrimSpace(line)
+		if trim == "[project]" || strings.HasPrefix(trim, "[project.") {
+			inDeps = strings.Contains(trim, "dependencies") || trim == "[project]"
+		}
+		if strings.HasPrefix(trim, "[") && !strings.Contains(trim, "dependencies") && trim != "[project]" {
+			if strings.Contains(trim, "dependencies") {
+				inDeps = true
+			} else if inDeps && !strings.HasPrefix(trim, "dependencies") {
+				inDeps = strings.Contains(strings.ToLower(trim), "depend")
+			}
+		}
+		if strings.HasPrefix(trim, "dependencies") && strings.Contains(trim, "[") {
+			inDeps = true
+			continue
+		}
+		if inDeps && (strings.HasPrefix(trim, "\"") || strings.HasPrefix(trim, "'")) {
+			raw := strings.Trim(trim, "\",' ")
+			name := raw
+			version := ""
+			for _, sep := range []string{">=", "<=", "==", "~="} {
+				if i := strings.Index(raw, sep); i > 0 {
+					name = strings.TrimSpace(raw[:i])
+					version = strings.TrimSpace(raw[i:])
+					break
+				}
+			}
+			if name != "" {
+				deps = append(deps, Dependency{Name: name, Version: version, Type: "python"})
+			}
+		}
+		if inDeps && trim == "]" {
+			inDeps = false
+		}
+	}
+	return deps
+}
+
+func ParseCargoToml(content string) []Dependency {
+	var deps []Dependency
+	inDeps := false
+	for _, line := range strings.Split(content, "\n") {
+		trim := strings.TrimSpace(line)
+		if trim == "[dependencies]" || trim == "[dev-dependencies]" {
+			inDeps = true
+			continue
+		}
+		if strings.HasPrefix(trim, "[") {
+			inDeps = false
+			continue
+		}
+		if !inDeps || trim == "" || strings.HasPrefix(trim, "#") {
+			continue
+		}
+		parts := strings.SplitN(trim, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		version := strings.Trim(strings.TrimSpace(parts[1]), "\"")
+		if strings.HasPrefix(version, "{") {
+			re := regexp.MustCompile(`version\s*=\s*"([^"]+)"`)
+			if m := re.FindStringSubmatch(version); len(m) > 1 {
+				version = m[1]
+			}
+		}
+		deps = append(deps, Dependency{Name: name, Version: version, Type: "rust"})
+	}
+	return deps
+}
+
+func ParseDockerfile(content string) []Dependency {
+	var deps []Dependency
+	re := regexp.MustCompile(`(?i)^FROM\s+([^\s]+)`)
+	for _, line := range strings.Split(content, "\n") {
+		if m := re.FindStringSubmatch(strings.TrimSpace(line)); len(m) > 1 {
+			deps = append(deps, Dependency{Name: m[1], Version: "", Type: "runtime"})
+		}
+	}
+	return deps
+}
+
+func ParseGoMod(content string) ([]Dependency, string) {
+	var deps []Dependency
+	lines := strings.Split(content, "\n")
+	inBlock := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "require (") {
+			inBlock = true
+			continue
+		}
+		if inBlock {
+			if line == ")" {
+				inBlock = false
+				continue
+			}
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				deps = append(deps, Dependency{Name: parts[0], Version: parts[1], Type: "go"})
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "require ") && !strings.Contains(line, "(") {
+			parts := strings.Fields(line)
+			if len(parts) >= 3 {
+				deps = append(deps, Dependency{Name: parts[1], Version: parts[2], Type: "go"})
+			}
+		}
+	}
+	return deps, "Go"
 }
 
 func IsCodeOwners(path string) bool {
@@ -180,21 +334,6 @@ func detectJSFramework(deps map[string]string) string {
 		return "NestJS"
 	}
 	return ""
-}
-
-func ParseGoMod(content string) ([]Dependency, string) {
-	var deps []Dependency
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "require ") && !strings.Contains(line, "(") {
-			parts := strings.Fields(line)
-			if len(parts) >= 3 {
-				deps = append(deps, Dependency{Name: parts[1], Version: parts[2], Type: "go"})
-			}
-		}
-	}
-	return deps, "Go"
 }
 
 func ParseADR(content, path string) ADR {

@@ -1,7 +1,9 @@
-import { notFound } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import { fetchPublishedDocs } from "@/lib/api";
+import { DocsUnavailable } from "@/components/docs-unavailable";
 import { DocsSidebar } from "@/components/sidebar";
+import { MdxContent } from "@/components/mdx-content";
+import { fetchPublishedDocs } from "@/lib/api";
+import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 export default async function GuidePage({
   params,
@@ -9,19 +11,21 @@ export default async function GuidePage({
   params: Promise<{ org: string; project: string; slug: string }>;
 }) {
   const { org, project, slug } = await params;
-  const data = await fetchPublishedDocs(org, project);
-  if (!data) notFound();
+  const result = await fetchPublishedDocs(org, project);
+  if (!result.ok) {
+    return <DocsUnavailable org={org} project={project} error={result.error} />;
+  }
 
-  const page = data.manifest.pages.find((p) => p.slug === `/${slug}`);
+  const page = result.data.manifest.pages.find((p) => p.slug === `/${slug}`);
   if (!page) notFound();
 
   return (
     <div className="flex min-h-screen">
-      <DocsSidebar org={org} project={project} manifest={data.manifest} />
+      <Suspense fallback={<aside className="w-72 border-r border-zinc-800" />}>
+        <DocsSidebar org={org} project={project} manifest={result.data.manifest} />
+      </Suspense>
       <main className="flex-1 overflow-auto p-8">
-        <article className="prose prose-invert max-w-3xl">
-          <ReactMarkdown>{page.content}</ReactMarkdown>
-        </article>
+        <MdxContent source={page.content} />
       </main>
     </div>
   );

@@ -6,6 +6,7 @@ import { validateCommand } from "./commands/validate.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { docsDevCommand } from "./commands/docs-dev.js";
 import { docsPublishCommand } from "./commands/docs-publish.js";
+import { docsBuildCommand } from "./commands/docs-build.js";
 import { generateCommand } from "./commands/generate.js";
 import { loginCommand } from "./commands/login.js";
 import { diffCommand } from "./commands/diff.js";
@@ -51,6 +52,12 @@ docs
   .description("Publish documentation to Frond cloud")
   .option("--project-id <id>", "Project UUID (required)")
   .action(docsPublishCommand);
+
+docs
+  .command("build")
+  .description("Build a static docs bundle (manifest + assets)")
+  .option("-o, --out <dir>", "Output directory", "frond-out")
+  .action(docsBuildCommand);
 
 program
   .command("generate")

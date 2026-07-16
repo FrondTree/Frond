@@ -12,8 +12,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiFetch, asArray, type ConnectedRepo, type Organization } from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
 function GitHubContent() {
   const router = useRouter();
   const params = useSearchParams();
@@ -81,7 +79,34 @@ function GitHubContent() {
 
   function connectGitHub() {
     if (!org) return;
-    window.location.href = `${API_URL}/v1/orgs/${org.slug}/github/connect?redirect_uri=${encodeURIComponent(window.location.origin + "/dashboard/github")}`;
+    void (async () => {
+      try {
+        const data = await apiFetch<{ url: string }>(
+          `/v1/orgs/${org.slug}/github/connect?format=json&redirect_uri=${encodeURIComponent(window.location.origin + "/dashboard/github")}`,
+        );
+        window.location.href = data.url;
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Failed to start GitHub connect");
+      }
+    })();
+  }
+
+  function installGitHubApp() {
+    if (!org) return;
+    void (async () => {
+      try {
+        const data = await apiFetch<{ url: string; mode: string; message?: string }>(
+          `/v1/orgs/${org.slug}/github/install?redirect_uri=${encodeURIComponent(window.location.origin + "/dashboard/github")}`,
+        );
+        if (!data.url) {
+          toast.message(data.message ?? "GitHub App not configured — use Connect OAuth");
+          return;
+        }
+        window.location.href = data.url;
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Failed to start GitHub App install");
+      }
+    })();
   }
 
   async function connectSelected() {
@@ -142,7 +167,14 @@ function GitHubContent() {
         <EmptyState
           title="GitHub not connected"
           description={`Authorize Frond for ${org.name} to list and scan repositories.`}
-          action={<Button onClick={connectGitHub}>Connect GitHub</Button>}
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={connectGitHub}>Connect GitHub (OAuth)</Button>
+              <Button variant="outline" onClick={installGitHubApp}>
+                Install GitHub App
+              </Button>
+            </div>
+          }
         />
       ) : (
         <div className="space-y-6">

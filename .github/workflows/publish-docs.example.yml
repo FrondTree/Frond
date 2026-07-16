@@ -31,7 +31,5 @@ jobs:
       - name: Publish
         env:
           FROND_API_URL: ${{ secrets.FROND_API_URL }}
-        run: |
-          frond docs publish --project-id ${{ secrets.FROND_PROJECT_ID }}
-        # Set FROND_API_KEY via: echo "FROND_API_KEY=..." >> $GITHUB_ENV
-        # Or configure ~/.frond/credentials.json in a prior setup step
+          FROND_API_KEY: ${{ secrets.FROND_API_KEY }}
+        run: frond docs publish --project-id ${{ secrets.FROND_PROJECT_ID }}

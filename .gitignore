@@ -40,3 +40,5 @@ coverage/
 
 # Frond local
 .frond/
+frond/
+commands.txt

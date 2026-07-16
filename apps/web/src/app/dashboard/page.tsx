@@ -1,18 +1,68 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, Github } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Copy,
+  ExternalLink,
+  Github,
+  Plus,
+} from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ApiError, apiFetch, asArray, type Organization, type Project } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+function CopyIconButton({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 shrink-0"
+      aria-label={`Copy ${label}`}
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          toast.success(`${label} copied`);
+          window.setTimeout(() => setCopied(false), 1400);
+        });
+      }}
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+    </Button>
+  );
+}
+
+function StatCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+        {hint && <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p>}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -74,7 +124,7 @@ export default function DashboardPage() {
       setOrgs((o) => [org, ...o]);
       setSelectedOrg(org);
       setNewOrgName("");
-      toast.success(`Created organization ${org.name}`);
+      toast.success(`Created ${org.name}`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to create organization");
     } finally {
@@ -93,7 +143,7 @@ export default function DashboardPage() {
       });
       setProjects((p) => [project, ...p]);
       setNewProjectName("");
-      toast.success(`Created project ${project.name}`);
+      toast.success(`Created ${project.name}`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to create project");
     } finally {
@@ -101,152 +151,260 @@ export default function DashboardPage() {
     }
   }
 
-  function connectGitHub() {
+  async function connectGitHub() {
     if (!selectedOrg) return;
-    window.location.href = `${API_URL}/v1/orgs/${selectedOrg.slug}/github/connect?redirect_uri=${encodeURIComponent(window.location.origin + "/dashboard/github")}`;
-  }
-
-  function copyPublishCommand(projectId: string) {
-    const cmd = `frond docs publish --project-id ${projectId}`;
-    void navigator.clipboard.writeText(cmd).then(() => toast.success("Publish command copied"));
+    try {
+      const data = await apiFetch<{ url: string }>(
+        `/v1/orgs/${selectedOrg.slug}/github/connect?format=json&redirect_uri=${encodeURIComponent(window.location.origin + "/dashboard/github")}`,
+      );
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to start GitHub connect");
+    }
   }
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-64" />
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Skeleton className="h-64" />
-          <Skeleton className="h-64" />
+        <Skeleton className="h-10 w-56" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
         </div>
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         title="Overview"
-        description="Manage organizations and documentation projects."
+        description="Manage organizations and documentation projects for this workspace."
         actions={
-          selectedOrg ? (
-            <Button variant="outline" onClick={connectGitHub}>
-              <Github />
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/docs">
+                <BookOpen className="h-4 w-4" />
+                Setup guide
+              </Link>
+            </Button>
+            <Button variant="outline" disabled={!selectedOrg} onClick={() => void connectGitHub()}>
+              <Github className="h-4 w-4" />
               Connect GitHub
             </Button>
-          ) : undefined
+          </div>
         }
       />
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Organizations</CardTitle>
-            <CardDescription>Select an org to scope projects and intelligence.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Input
-                value={newOrgName}
-                onChange={(e) => setNewOrgName(e.target.value)}
-                placeholder="New organization"
-                disabled={creatingOrg}
-                onKeyDown={(e) => e.key === "Enter" && void createOrg()}
-              />
-              <Button onClick={() => void createOrg()} disabled={creatingOrg || !newOrgName.trim()}>
-                {creatingOrg ? "Creating…" : "Create"}
-              </Button>
-            </div>
-            {orgs.length === 0 ? (
-              <EmptyState title="No organizations yet" description="Create one to start publishing docs." />
-            ) : (
-              <ul className="space-y-1">
-                {orgs.map((org) => (
-                  <li key={org.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedOrg(org)}
-                      className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                        selectedOrg?.id === org.id ? "bg-accent text-accent-foreground" : "hover:bg-muted"
-                      }`}
-                    >
-                      <span className="font-medium">{org.name}</span>
-                      <span className="ml-2 text-muted-foreground">/{org.slug}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Organizations" value={orgs.length} hint="Workspaces you belong to" />
+        <StatCard
+          label="Projects"
+          value={selectedOrg ? projects.length : "—"}
+          hint={selectedOrg ? `In /${selectedOrg.slug}` : "Select an organization"}
+        />
+        <StatCard
+          label="Active organization"
+          value={selectedOrg?.name ?? "None"}
+          hint={selectedOrg ? `Role: ${selectedOrg.role ?? "member"}` : "Create one below"}
+        />
+      </div>
 
-        <Card>
-          <CardHeader>
+      <Card id="orgs">
+        <CardHeader className="flex flex-col gap-4 space-y-0 border-b sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle>Organizations</CardTitle>
+            <CardDescription>Select a row to scope projects and intelligence.</CardDescription>
+          </div>
+          <form
+            className="flex w-full gap-2 sm:w-auto sm:max-w-sm"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void createOrg();
+            }}
+          >
+            <Input
+              value={newOrgName}
+              onChange={(e) => setNewOrgName(e.target.value)}
+              placeholder="Organization name"
+              disabled={creatingOrg}
+              className="sm:w-52"
+            />
+            <Button type="submit" disabled={creatingOrg || !newOrgName.trim()}>
+              <Plus className="h-4 w-4" />
+              {creatingOrg ? "Creating…" : "Create"}
+            </Button>
+          </form>
+        </CardHeader>
+        <CardContent className="p-0">
+          {orgs.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                title="No organizations"
+                description="Create an organization to start adding documentation projects."
+              />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-10" />
+                  <TableHead>Name</TableHead>
+                  <TableHead>Slug</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead className="text-right">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orgs.map((org) => {
+                  const active = selectedOrg?.id === org.id;
+                  return (
+                    <TableRow
+                      key={org.id}
+                      data-state={active ? "selected" : undefined}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedOrg(org)}
+                    >
+                      <TableCell>
+                        <span
+                          className={cn(
+                            "inline-block h-2 w-2 rounded-full",
+                            active ? "bg-primary" : "bg-muted-foreground/30",
+                          )}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{org.name}</TableCell>
+                      <TableCell>
+                        <code className="text-xs text-muted-foreground">/{org.slug}</code>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{org.role ?? "member"}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {active ? (
+                          <Badge>Active</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Click to select</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card id="projects">
+        <CardHeader className="flex flex-col gap-4 space-y-0 border-b sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
             <CardTitle>Documentation projects</CardTitle>
             <CardDescription>
-              {selectedOrg ? `Projects in ${selectedOrg.name}` : "Select an organization first"}
+              {selectedOrg
+                ? `Projects in ${selectedOrg.name}. Use the project ID with frond docs publish.`
+                : "Select an organization to view projects."}
             </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!selectedOrg ? (
-              <EmptyState title="No organization selected" description="Create or select an organization to continue." />
-            ) : (
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    placeholder="New project"
-                    disabled={creatingProject}
-                    onKeyDown={(e) => e.key === "Enter" && void createProject()}
-                  />
-                  <Button
-                    onClick={() => void createProject()}
-                    disabled={creatingProject || !newProjectName.trim()}
-                  >
-                    {creatingProject ? "Creating…" : "Create"}
+          </div>
+          {selectedOrg && (
+            <form
+              className="flex w-full gap-2 sm:w-auto sm:max-w-sm"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void createProject();
+              }}
+            >
+              <Input
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Project name"
+                disabled={creatingProject}
+                className="sm:w-52"
+              />
+              <Button type="submit" disabled={creatingProject || !newProjectName.trim()}>
+                <Plus className="h-4 w-4" />
+                {creatingProject ? "Creating…" : "Create"}
+              </Button>
+            </form>
+          )}
+        </CardHeader>
+        <CardContent className="p-0">
+          {!selectedOrg ? (
+            <div className="p-6">
+              <EmptyState
+                title="No organization selected"
+                description="Select an organization in the table above."
+              />
+            </div>
+          ) : projectsLoading ? (
+            <div className="space-y-3 p-6">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                title="No projects yet"
+                description="Create a project, then publish docs with the CLI."
+                action={
+                  <Button variant="outline" asChild>
+                    <Link href="/dashboard/docs">Open setup guide</Link>
                   </Button>
-                </div>
-                {projectsLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-16" />
-                    <Skeleton className="h-16" />
-                  </div>
-                ) : projects.length === 0 ? (
-                  <EmptyState
-                    title="No projects yet"
-                    description="Create a documentation project, then publish with the CLI."
-                  />
-                ) : (
-                  <ul className="space-y-3">
-                    {projects.map((p) => (
-                      <li key={p.id} className="rounded-md border p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-medium">{p.name}</div>
-                            <p className="mt-0.5 text-xs text-muted-foreground">/{p.slug}</p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Copy publish command"
-                            onClick={() => copyPublishCommand(p.id)}
-                          >
-                            <Copy className="h-4 w-4" />
+                }
+              />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Name</TableHead>
+                  <TableHead>Slug</TableHead>
+                  <TableHead>Project ID</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {projects.map((p) => {
+                  const docsUrl = `http://localhost:3001/${selectedOrg.slug}/${p.slug}`;
+                  const publishCmd = `frond docs publish --project-id ${p.id}`;
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell>
+                        <code className="text-xs text-muted-foreground">/{p.slug}</code>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex max-w-[220px] items-center gap-1">
+                          <code className="truncate font-mono text-xs text-muted-foreground">{p.id}</code>
+                          <CopyIconButton label="Project ID" value={p.id} />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <CopyIconButton label="Publish command" value={publishCmd} />
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={docsUrl} target="_blank" rel="noreferrer">
+                              Docs
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </Button>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href="/dashboard/docs">Publish help</Link>
                           </Button>
                         </div>
-                        <code className="mt-3 block overflow-x-auto rounded-md bg-muted px-2 py-1.5 font-mono text-xs text-muted-foreground">
-                          frond docs publish --project-id {p.id}
-                        </code>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

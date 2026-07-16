@@ -250,6 +250,9 @@ importers:
       '@frond/config':
         specifier: workspace:*
         version: link:../config
+      yaml:
+        specifier: ^2.6.1
+        version: 2.9.0
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

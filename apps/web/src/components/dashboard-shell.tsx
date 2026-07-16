@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
+  BookOpen,
   Boxes,
   GitBranch,
   Github,
   LayoutDashboard,
   LogOut,
   Network,
+  Settings,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -20,11 +22,13 @@ import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/docs", label: "Docs guide", icon: BookOpen },
   { href: "/dashboard/github", label: "GitHub", icon: Github },
   { href: "/dashboard/architecture", label: "Architecture", icon: Network },
   { href: "/dashboard/services", label: "Services", icon: Boxes },
   { href: "/dashboard/dependencies", label: "Dependencies", icon: GitBranch },
   { href: "/dashboard/health", label: "Doc Health", icon: Activity },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -56,7 +60,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <nav className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
             {links.map((l) => {
               const Icon = l.icon;
-              const active = pathname === l.href;
+              const active = pathname === l.href || (l.href !== "/dashboard" && pathname.startsWith(l.href));
               return (
                 <Link
                   key={l.href}
@@ -76,7 +80,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </nav>
           <Separator className="mt-4 hidden lg:block" />
           <p className="mt-4 hidden text-xs text-muted-foreground lg:block">
-            Demo: connect GitHub, then scan repos for architecture and health.
+            New here? Open Docs guide for init, validate, and publish.
           </p>
         </aside>
 

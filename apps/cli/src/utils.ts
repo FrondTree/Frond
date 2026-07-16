@@ -12,12 +12,19 @@ export interface Credentials {
 
 export async function loadCredentials(): Promise<Credentials> {
   const apiUrl = process.env.FROND_API_URL ?? "http://localhost:8080";
+  const envApiKey = process.env.FROND_API_KEY;
+  const envToken = process.env.FROND_TOKEN;
   try {
     const raw = await readFile(CREDENTIALS_PATH, "utf-8");
     const parsed = JSON.parse(raw) as Credentials;
-    return { ...parsed, apiUrl: parsed.apiUrl ?? apiUrl };
+    return {
+      ...parsed,
+      apiUrl: process.env.FROND_API_URL ?? parsed.apiUrl ?? apiUrl,
+      apiKey: envApiKey ?? parsed.apiKey,
+      token: envToken ?? parsed.token,
+    };
   } catch {
-    return { apiUrl };
+    return { apiUrl, apiKey: envApiKey, token: envToken };
   }
 }
 

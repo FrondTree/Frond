@@ -6,14 +6,16 @@ import (
 
 	"github.com/frond-dev/frond/services/api/internal/graphstore"
 	"github.com/frond-dev/frond/services/api/internal/models"
+	"github.com/frond-dev/frond/services/api/internal/search"
 	"github.com/frond-dev/frond/services/api/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type IntelligenceHandler struct {
-	Store *store.Store
-	Graph *graphstore.Store
+	Store        *store.Store
+	Graph        *graphstore.Store
+	SearchClient *search.Client
 }
 
 func (h *IntelligenceHandler) Architecture(w http.ResponseWriter, r *http.Request) {
@@ -131,6 +133,27 @@ func (h *IntelligenceHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query().Get("q")
+	if q == "" {
+		writeJSON(w, http.StatusOK, []models.UnifiedSearchResult{})
+		return
+	}
+
+	if h.SearchClient != nil {
+		if docs, err := h.SearchClient.SearchOrg(r.Context(), org.ID.String(), q, 30); err == nil && len(docs) > 0 {
+			out := make([]models.UnifiedSearchResult, 0, len(docs))
+			for _, d := range docs {
+				out = append(out, models.UnifiedSearchResult{
+					Type:    d.Type,
+					Title:   d.Title,
+					Content: d.Content,
+					URL:     d.URL,
+				})
+			}
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
+	}
+
 	results, err := h.Graph.UnifiedSearch(r.Context(), org.ID, q, 30)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "search_error", err.Error())

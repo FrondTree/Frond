@@ -89,6 +89,30 @@ export interface KGService {
   html_url: string;
 }
 
+export interface ServiceDetail {
+  service: KGService;
+  apis: Array<{
+    id: string;
+    method: string;
+    path: string;
+    summary?: string;
+    documented?: boolean;
+  }>;
+  dependencies: Array<{
+    id: string;
+    name: string;
+    version: string;
+    dep_type: string;
+  }>;
+  adrs: Array<{
+    id: string;
+    adr_number: string;
+    title: string;
+    status: string;
+    file_path: string;
+  }>;
+}
+
 export interface GraphNode {
   id: string;
   type: string;

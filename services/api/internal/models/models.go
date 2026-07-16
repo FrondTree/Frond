@@ -72,6 +72,29 @@ type APIKey struct {
 	CreatedAt      time.Time  `json:"created_at"`
 }
 
+type OrgInvite struct {
+	ID             uuid.UUID  `json:"id"`
+	OrganizationID uuid.UUID  `json:"organization_id"`
+	Email          string     `json:"email"`
+	Role           string     `json:"role"`
+	Token          string     `json:"token"`
+	InvitedBy      uuid.UUID  `json:"invited_by"`
+	AcceptedAt     *time.Time `json:"accepted_at,omitempty"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	OrgSlug        string     `json:"org_slug,omitempty"`
+	OrgName        string     `json:"org_name,omitempty"`
+}
+
+type OrgMember struct {
+	UserID    uuid.UUID `json:"user_id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	Username  string    `json:"username,omitempty"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type PublishManifest struct {
 	Title       string            `json:"title"`
 	Versions    []ManifestVersion `json:"versions"`

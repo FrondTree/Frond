@@ -15,6 +15,7 @@ import (
 	"github.com/frond-dev/frond/services/api/internal/graphstore"
 	"github.com/frond-dev/frond/services/api/internal/middleware"
 	"github.com/frond-dev/frond/services/api/internal/models"
+	"github.com/frond-dev/frond/services/api/internal/scanner"
 	"github.com/frond-dev/frond/services/api/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -65,7 +66,13 @@ func (h *GitHubHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	})
 	_ = h.Store.SaveOAuthState(r.Context(), state, string(payload))
 
-	http.Redirect(w, r, h.GitHubOAuth.AuthURL(state), http.StatusTemporaryRedirect)
+	authURL := h.GitHubOAuth.AuthURL(state)
+	// JSON for SPA (Bearer via fetch); redirect for legacy browser navigations
+	if r.Header.Get("Accept") == "application/json" || r.URL.Query().Get("format") == "json" {
+		writeJSON(w, http.StatusOK, map[string]string{"url": authURL})
+		return
+	}
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 }
 
 func (h *GitHubHandler) Callback(w http.ResponseWriter, r *http.Request) {
@@ -341,12 +348,18 @@ func (h *GitHubHandler) handlePush(ctx context.Context, body []byte) {
 
 func (h *GitHubHandler) handlePullRequest(ctx context.Context, body []byte) {
 	var payload struct {
-		Action     string `json:"action"`
-		Number     int    `json:"number"`
-		HTMLURL    string `json:"html_url"`
+		Action string `json:"action"`
+		Number int    `json:"number"`
+		PullRequest struct {
+			HTMLURL string `json:"html_url"`
+		} `json:"pull_request"`
 		Repository struct {
 			ID       int64  `json:"id"`
 			FullName string `json:"full_name"`
+			Name     string `json:"name"`
+			Owner    struct {
+				Login string `json:"login"`
+			} `json:"owner"`
 		} `json:"repository"`
 	}
 	if json.Unmarshal(body, &payload) != nil {
@@ -367,16 +380,37 @@ func (h *GitHubHandler) handlePullRequest(ctx context.Context, body []byte) {
 		repoID = &repo.ID
 	}
 
+	published := h.Graph.ListDocumentedEndpointKeys(ctx, orgID)
+	token, tokErr := h.Graph.GetGitHubToken(ctx, orgID)
+	var drifts []string
+	if tokErr == nil {
+		ghClient := gh.NewClient(token)
+		sc := scanner.New(ghClient)
+		drifts, _ = sc.DetectDriftFromPR(ctx, payload.Repository.Owner.Login, payload.Repository.Name, payload.Number, published)
+		if len(drifts) > 0 {
+			comment := "**Frond documentation drift**\n\n" + strings.Join(drifts, "\n")
+			if len(comment) > 6000 {
+				comment = comment[:6000] + "\n…"
+			}
+			_ = ghClient.CreatePRComment(ctx, payload.Repository.Owner.Login, payload.Repository.Name, payload.Number, comment)
+		}
+	}
+
+	if len(drifts) == 0 {
+		drifts = []string{"PR touches API-related files. Review whether docs need updating."}
+	}
+
 	prNum := payload.Number
-	details, _ := json.Marshal(map[string]interface{}{"repo": payload.Repository.FullName})
+	prURL := payload.PullRequest.HTMLURL
+	details, _ := json.Marshal(map[string]interface{}{"repo": payload.Repository.FullName, "drifts": drifts})
 	_, _ = h.Graph.CreateDriftAlert(ctx, models.DocDriftAlert{
 		OrganizationID: orgID,
 		RepositoryID:   repoID,
 		PRNumber:       &prNum,
-		PRURL:          payload.HTMLURL,
+		PRURL:          prURL,
 		Severity:       "warning",
 		Title:          "Documentation drift detected",
-		Message:        "PR modifies API-related files. Review whether docs need updating.",
+		Message:        drifts[0],
 		Details:        details,
 	})
 }

@@ -31,7 +31,7 @@ export interface CompiledEndpoint {
   path: string;
   summary: string;
   description: string;
-  versionId: string;
+  version_id: string;
   tags: string[];
   request?: unknown;
   responses?: unknown;

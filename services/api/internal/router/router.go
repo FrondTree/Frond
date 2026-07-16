@@ -56,11 +56,13 @@ func New(d Deps) http.Handler {
 	orgHandler := &handlers.OrgHandler{Store: d.Store}
 	projectHandler := &handlers.ProjectHandler{Store: d.Store}
 	publishHandler := &handlers.PublishHandler{Store: d.Store, Storage: d.Storage, Search: d.Search}
-	docsHandler := &handlers.DocsHandler{Store: d.Store, Storage: d.Storage, Search: d.Search}
+	docsHandler := &handlers.DocsHandler{Store: d.Store, Storage: d.Storage, Search: d.Search, Auth: d.Auth}
 	githubHandler := &handlers.GitHubHandler{
 		Store: d.Store, Graph: d.Graph, GitHubOAuth: githubOAuth, WebhookSecret: d.Config.GitHubWebhookSecret,
 	}
-	intelHandler := &handlers.IntelligenceHandler{Store: d.Store, Graph: d.Graph}
+	intelHandler := &handlers.IntelligenceHandler{Store: d.Store, Graph: d.Graph, SearchClient: d.Search}
+	gitlabHandler := handlers.NewGitLabHandler()
+	bitbucketHandler := handlers.NewBitbucketHandler()
 
 	r.Get("/health", handlers.Health)
 	r.Get("/v1/health", handlers.Health)
@@ -78,14 +80,25 @@ func New(d Deps) http.Handler {
 			r.Get("/github/callback", githubHandler.Callback)
 			r.With(middleware.AuthJWT(d.Auth)).Get("/me", authHandler.Me)
 			r.With(middleware.AuthJWT(d.Auth)).Post("/api-keys", authHandler.CreateAPIKey)
+			r.With(middleware.AuthJWT(d.Auth)).Post("/invites/{token}/accept", orgHandler.AcceptInvite)
 		})
 
 		r.Post("/webhooks/github", githubHandler.Webhook)
+
+		r.Get("/docs/resolve", docsHandler.ResolveDomain)
 
 		r.Route("/orgs", func(r chi.Router) {
 			r.With(middleware.AuthJWT(d.Auth)).Get("/", orgHandler.List)
 			r.With(middleware.AuthJWT(d.Auth)).Post("/", orgHandler.Create)
 			r.Get("/{slug}", orgHandler.Get)
+
+			r.Route("/{orgSlug}/members", func(r chi.Router) {
+				r.With(middleware.AuthJWT(d.Auth)).Get("/", orgHandler.ListMembers)
+			})
+			r.Route("/{orgSlug}/invites", func(r chi.Router) {
+				r.With(middleware.AuthJWT(d.Auth)).Get("/", orgHandler.ListInvites)
+				r.With(middleware.AuthJWT(d.Auth)).Post("/", orgHandler.CreateInvite)
+			})
 
 			r.Route("/{orgSlug}/projects", func(r chi.Router) {
 				r.Get("/", projectHandler.List)
@@ -97,11 +110,21 @@ func New(d Deps) http.Handler {
 			r.Route("/{orgSlug}/github", func(r chi.Router) {
 				r.With(middleware.AuthJWT(d.Auth)).Get("/status", githubHandler.Status)
 				r.With(middleware.AuthJWT(d.Auth)).Get("/connect", githubHandler.Connect)
+				r.With(middleware.AuthJWT(d.Auth)).Get("/install", githubHandler.InstallApp)
 				r.With(middleware.AuthJWT(d.Auth)).Get("/repos", githubHandler.ListAvailableRepos)
 				r.With(middleware.AuthJWT(d.Auth)).Post("/repos", githubHandler.ConnectRepos)
 				r.With(middleware.AuthJWT(d.Auth)).Get("/connected", githubHandler.ListConnectedRepos)
 				r.With(middleware.AuthJWT(d.Auth)).Post("/repos/{repoID}/scan", githubHandler.TriggerScan)
 				r.With(middleware.AuthJWT(d.Auth)).Post("/repos/{repoID}/link", intelHandler.LinkRepoProject)
+			})
+
+			r.Route("/{orgSlug}/gitlab", func(r chi.Router) {
+				r.With(middleware.AuthJWT(d.Auth)).Get("/status", gitlabHandler.Status)
+				r.With(middleware.AuthJWT(d.Auth)).Get("/connect", gitlabHandler.Connect)
+			})
+			r.Route("/{orgSlug}/bitbucket", func(r chi.Router) {
+				r.With(middleware.AuthJWT(d.Auth)).Get("/status", bitbucketHandler.Status)
+				r.With(middleware.AuthJWT(d.Auth)).Get("/connect", bitbucketHandler.Connect)
 			})
 
 			// Phase 2: Intelligence
@@ -120,6 +143,7 @@ func New(d Deps) http.Handler {
 		r.Route("/projects/{projectID}", func(r chi.Router) {
 			r.With(middleware.AuthJWTOrAPIKey(d.Auth, d.Store)).Post("/publish", publishHandler.Publish)
 			r.With(middleware.AuthJWTOrAPIKey(d.Auth, d.Store)).Get("/deployments", publishHandler.ListDeployments)
+			r.With(middleware.AuthJWT(d.Auth)).Put("/custom-domain", publishHandler.SetCustomDomain)
 		})
 
 		r.Route("/docs/{orgSlug}/{projectSlug}", func(r chi.Router) {

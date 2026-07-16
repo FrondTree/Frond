@@ -11,13 +11,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
+	"github.com/frond-dev/frond/services/api/internal/auth"
 	"github.com/frond-dev/frond/services/api/internal/middleware"
 	"github.com/frond-dev/frond/services/api/internal/models"
 	"github.com/frond-dev/frond/services/api/internal/search"
 	"github.com/frond-dev/frond/services/api/internal/storage"
 	"github.com/frond-dev/frond/services/api/internal/store"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type PublishHandler struct {
@@ -147,6 +150,50 @@ type DocsHandler struct {
 	Store   *store.Store
 	Storage storage.Store
 	Search  *search.Client
+	Auth    *auth.Service
+}
+
+func (h *DocsHandler) authorizePrivate(w http.ResponseWriter, r *http.Request, orgID uuid.UUID) bool {
+	rawKey := r.Header.Get("X-Frond-Api-Key")
+	bearer := ""
+	if authHdr := r.Header.Get("Authorization"); strings.HasPrefix(authHdr, "Bearer ") {
+		bearer = strings.TrimPrefix(authHdr, "Bearer ")
+	}
+
+	if rawKey == "" && strings.HasPrefix(bearer, "frond_") {
+		rawKey = bearer
+	}
+
+	if rawKey != "" {
+		userID, keyOrgID, err := h.Store.GetUserByAPIKey(r.Context(), auth.HashAPIKey(rawKey))
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
+			return false
+		}
+		if keyOrgID != orgID {
+			writeError(w, http.StatusForbidden, "forbidden", "API key not valid for this organization")
+			return false
+		}
+		_ = userID
+		return true
+	}
+
+	if bearer != "" && h.Auth != nil {
+		claims, err := h.Auth.ParseJWT(bearer)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid_token", "invalid token")
+			return false
+		}
+		role, err := h.Store.UserOrgRole(r.Context(), claims.UserID, orgID)
+		if err != nil || role == "" {
+			writeError(w, http.StatusForbidden, "forbidden", "not a member of this organization")
+			return false
+		}
+		return true
+	}
+
+	writeError(w, http.StatusUnauthorized, "private_docs", "authentication required")
+	return false
 }
 
 func (h *DocsHandler) GetPublished(w http.ResponseWriter, r *http.Request) {
@@ -164,9 +211,7 @@ func (h *DocsHandler) GetPublished(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if project.Visibility == "private" {
-		// Phase 1: private docs require auth header; simplified check
-		if r.Header.Get("Authorization") == "" && r.Header.Get("X-Frond-Api-Key") == "" {
-			writeError(w, http.StatusUnauthorized, "private_docs", "authentication required")
+		if !h.authorizePrivate(w, r, org.ID) {
 			return
 		}
 	}
@@ -197,10 +242,15 @@ func (h *DocsHandler) SearchDocs(w http.ResponseWriter, r *http.Request) {
 	projectSlug := chi.URLParam(r, "projectSlug")
 	query := r.URL.Query().Get("q")
 
-	project, _, err := h.Store.GetProjectByOrgSlug(r.Context(), orgSlug, projectSlug)
+	project, org, err := h.Store.GetProjectByOrgSlug(r.Context(), orgSlug, projectSlug)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "")
 		return
+	}
+	if project.Visibility == "private" {
+		if !h.authorizePrivate(w, r, org.ID) {
+			return
+		}
 	}
 
 	results, err := h.Search.Search(r.Context(), project.ID.String(), query, 20)
@@ -215,10 +265,15 @@ func (h *DocsHandler) GetBundle(w http.ResponseWriter, r *http.Request) {
 	orgSlug := chi.URLParam(r, "orgSlug")
 	projectSlug := chi.URLParam(r, "projectSlug")
 
-	project, _, err := h.Store.GetProjectByOrgSlug(r.Context(), orgSlug, projectSlug)
+	project, org, err := h.Store.GetProjectByOrgSlug(r.Context(), orgSlug, projectSlug)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "")
 		return
+	}
+	if project.Visibility == "private" {
+		if !h.authorizePrivate(w, r, org.ID) {
+			return
+		}
 	}
 
 	dv, err := h.Store.GetLatestDocVersion(r.Context(), project.ID)
@@ -236,6 +291,75 @@ func (h *DocsHandler) GetBundle(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/gzip")
 	io.Copy(w, reader)
+}
+
+func (h *DocsHandler) ResolveDomain(w http.ResponseWriter, r *http.Request) {
+	host := r.URL.Query().Get("host")
+	if host == "" {
+		host = r.Host
+	}
+	org, project, dep, err := h.Store.ResolveCustomDomain(r.Context(), host)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "domain_not_found", "")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"organization": org,
+		"project":      project,
+		"deployment":   dep,
+		"path":         "/" + org.Slug + "/" + project.Slug,
+	})
+}
+
+func (h *PublishHandler) SetCustomDomain(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "")
+		return
+	}
+	projectID, err := parseUUID(chi.URLParam(r, "projectID"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_project_id", "")
+		return
+	}
+	project, err := h.Store.GetProjectByID(r.Context(), projectID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "")
+		return
+	}
+	role, err := h.Store.UserOrgRole(r.Context(), userID, project.OrganizationID)
+	if err != nil || (role != "owner" && role != "admin") {
+		writeError(w, http.StatusForbidden, "forbidden", "")
+		return
+	}
+	var body struct {
+		Domain string `json:"domain"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	dep, err := h.Store.SetDeploymentCustomDomain(r.Context(), projectID, body.Domain)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "no_deployment", "publish docs before setting a custom domain")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"deployment": dep,
+		"instructions": map[string]string{
+			"cname":  "cname.frond.dev",
+			"domain": body.Domain,
+			"note":   "Point your domain CNAME to the Frond docs host, then wait for DNS propagation.",
+		},
+	})
 }
 
 // ExtractManifestFromBundle reads manifest.json from a tar.gz bundle.

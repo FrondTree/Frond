@@ -24,7 +24,7 @@ export function extractEndpoints(
   path: string;
   summary: string;
   description: string;
-  versionId: string;
+  version_id: string;
   tags: string[];
   request?: unknown;
   responses?: unknown;
@@ -53,7 +53,7 @@ export function extractEndpoints(
         path: routePath,
         summary: op.summary ?? "",
         description: op.description ?? "",
-        versionId,
+        version_id: versionId,
         tags: op.tags ?? ["default"],
         request: op.requestBody,
         responses: op.responses,

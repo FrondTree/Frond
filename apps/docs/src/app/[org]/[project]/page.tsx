@@ -1,7 +1,8 @@
-import { notFound } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import { fetchPublishedDocs } from "@/lib/api";
+import { DocsUnavailable } from "@/components/docs-unavailable";
 import { DocsSidebar } from "@/components/sidebar";
+import { MdxContent } from "@/components/mdx-content";
+import { fetchPublishedDocs } from "@/lib/api";
+import { Suspense } from "react";
 
 export default async function ProjectHome({
   params,
@@ -9,18 +10,21 @@ export default async function ProjectHome({
   params: Promise<{ org: string; project: string }>;
 }) {
   const { org, project } = await params;
-  const data = await fetchPublishedDocs(org, project);
-  if (!data) notFound();
+  const result = await fetchPublishedDocs(org, project);
+  if (!result.ok) {
+    return <DocsUnavailable org={org} project={project} error={result.error} />;
+  }
 
-  const landing = data.manifest.pages.find((p) => p.type === "landing") ?? data.manifest.pages[0];
+  const { manifest } = result.data;
+  const landing = manifest.pages.find((p) => p.type === "landing") ?? manifest.pages[0];
 
   return (
     <div className="flex min-h-screen">
-      <DocsSidebar org={org} project={project} manifest={data.manifest} />
+      <Suspense fallback={<aside className="w-72 border-r border-zinc-800" />}>
+        <DocsSidebar org={org} project={project} manifest={manifest} />
+      </Suspense>
       <main className="flex-1 overflow-auto p-8">
-        <article className="prose prose-invert max-w-3xl prose-headings:font-semibold prose-a:text-indigo-400">
-          <ReactMarkdown>{landing?.content ?? "# Documentation"}</ReactMarkdown>
-        </article>
+        <MdxContent source={landing?.content ?? "# Documentation"} />
       </main>
     </div>
   );

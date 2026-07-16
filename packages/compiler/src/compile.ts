@@ -67,7 +67,7 @@ export async function compileProject(
       type: "endpoint",
       title: `${e.method} ${e.path}`,
       content: `${e.summary} ${e.description}`.trim(),
-      url: `/api/${e.versionId}${e.path}`,
+      url: `/api/${e.version_id}${e.path}`,
     })),
   ];
 

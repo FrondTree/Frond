@@ -471,6 +471,26 @@ func (s *Store) BuildArchitectureGraph(ctx context.Context, orgID uuid.UUID) (*m
 	return graph, nil
 }
 
+func (s *Store) ListDocumentedEndpointKeys(ctx context.Context, orgID uuid.UUID) []string {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT UPPER(a.method) || ' ' || a.path
+		FROM kg_apis a
+		WHERE a.organization_id = $1 AND a.documented = TRUE
+	`, orgID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var k string
+		if rows.Scan(&k) == nil {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
 func (s *Store) MarkDocumentedAPIs(ctx context.Context, orgID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE kg_apis a SET documented = TRUE
@@ -515,13 +535,45 @@ func (s *Store) ComputeHealth(ctx context.Context, orgID uuid.UUID) (*models.Doc
 		}
 	}
 
+	var stale int
+	_ = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM kg_apis a
+		JOIN connected_repositories r ON r.id = a.repository_id
+		WHERE a.organization_id = $1
+		  AND a.documented = FALSE
+		  AND (r.last_scanned_at IS NULL OR r.last_scanned_at < NOW() - INTERVAL '14 days')
+	`, orgID).Scan(&stale)
+
+	var unscanned int
+	_ = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM connected_repositories
+		WHERE organization_id = $1 AND (last_scanned_at IS NULL OR last_scanned_at < NOW() - INTERVAL '30 days')
+	`, orgID).Scan(&unscanned)
+	stale += unscanned
+
+	if stale > 0 {
+		issues = append(issues, map[string]string{
+			"severity": "warning",
+			"message":  fmt.Sprintf("%d stale API/repo freshness signals detected", stale),
+		})
+	}
+
+	// Soft-penalize score for staleness
+	if stale > 0 && score > 10 {
+		penalty := stale * 2
+		if penalty > 20 {
+			penalty = 20
+		}
+		score -= penalty
+	}
+
 	issuesJSON, _ := json.Marshal(issues)
 	var snap models.DocHealthSnapshot
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO doc_health_snapshots (organization_id, score, coverage_pct, api_total, api_documented, stale_pages, issues)
-		VALUES ($1,$2,$3,$4,$5,0,$6)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		RETURNING id, organization_id, score, coverage_pct, api_total, api_documented, stale_pages, issues, computed_at
-	`, orgID, score, coverage, total, documented, issuesJSON).Scan(
+	`, orgID, score, coverage, total, documented, stale, issuesJSON).Scan(
 		&snap.ID, &snap.OrganizationID, &snap.Score, &snap.CoveragePct, &snap.APITotal, &snap.APIDocumented, &snap.StalePages, &snap.Issues, &snap.ComputedAt,
 	)
 	return &snap, err

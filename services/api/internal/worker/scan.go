@@ -2,14 +2,17 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/frond-dev/frond/services/api/internal/github"
 	"github.com/frond-dev/frond/services/api/internal/graphstore"
+	"github.com/frond-dev/frond/services/api/internal/models"
 	"github.com/frond-dev/frond/services/api/internal/scanner"
 	"github.com/frond-dev/frond/services/api/internal/search"
+	"github.com/google/uuid"
 )
 
 type ScanWorker struct {
@@ -53,7 +56,7 @@ func (w *ScanWorker) processOne(ctx context.Context) {
 	sc := scanner.New(gh)
 	parts := strings.SplitN(repo.FullName, "/", 2)
 	if len(parts) != 2 {
-		_ = w.graph.CompleteScanJob(ctx, job.ID, repo.ID, 0, err)
+		_ = w.graph.CompleteScanJob(ctx, job.ID, repo.ID, 0, fmt.Errorf("invalid repo name"))
 		return
 	}
 
@@ -77,7 +80,45 @@ func (w *ScanWorker) processOne(ctx context.Context) {
 	log.Printf("scan completed: %s (%d files)", repo.FullName, filesScanned)
 }
 
-func (w *ScanWorker) indexOrgSearch(ctx context.Context, orgID interface{}) error {
-	// Index services and APIs into org-wide search index
-	return nil
+func (w *ScanWorker) indexOrgSearch(ctx context.Context, orgID uuid.UUID) error {
+	if w.search == nil {
+		return nil
+	}
+	services, err := w.graph.ListServices(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	var docs []models.SearchDocument
+	for _, svc := range services {
+		docs = append(docs, models.SearchDocument{
+			ID:      "svc_" + svc.ID.String(),
+			Type:    "service",
+			Title:   svc.Name,
+			Content: svc.Description + " " + svc.Language + " " + svc.Framework,
+			URL:     "/dashboard/services/" + svc.ID.String(),
+		})
+		detail, err := w.graph.GetServiceDetail(ctx, orgID, svc.ID)
+		if err != nil {
+			continue
+		}
+		for _, api := range detail.APIs {
+			docs = append(docs, models.SearchDocument{
+				ID:      "api_" + api.ID.String(),
+				Type:    "api",
+				Title:   api.Method + " " + api.Path,
+				Content: api.Summary + " " + api.Description,
+				URL:     "/dashboard/services/" + svc.ID.String(),
+			})
+		}
+		for _, adr := range detail.ADRs {
+			docs = append(docs, models.SearchDocument{
+				ID:      "adr_" + adr.ID.String(),
+				Type:    "adr",
+				Title:   adr.Title,
+				Content: adr.Content,
+				URL:     "/dashboard/services/" + svc.ID.String(),
+			})
+		}
+	}
+	return w.search.IndexOrgIntelligence(ctx, orgID.String(), docs)
 }

@@ -17,7 +17,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@frond/config": "workspace:*"
+    "@frond/config": "workspace:*",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

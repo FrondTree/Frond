@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -124,33 +125,33 @@ export default function ServicesPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {services.map((s) => (
-            <Card key={s.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle>{s.name}</CardTitle>
-                    <CardDescription className="mt-1.5">{s.repository_name}</CardDescription>
+            <Link key={s.id} href={`/dashboard/services/${s.id}`} className="block transition-opacity hover:opacity-90">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>{s.name}</CardTitle>
+                      <CardDescription className="mt-1.5">{s.repository_name}</CardDescription>
+                    </div>
+                    <span
+                      onClick={(e) => e.preventDefault()}
+                      className="text-xs text-muted-foreground"
+                    >
+                      {s.language}
+                    </span>
                   </div>
-                  <a
-                    href={s.html_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    GitHub
-                  </a>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="line-clamp-2 text-sm text-muted-foreground">
-                  {s.description || "No description"}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {s.language && <Badge variant="outline">{s.language}</Badge>}
-                  {s.framework && <Badge variant="outline">{s.framework}</Badge>}
-                </div>
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {s.description || "No description"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {s.language && <Badge variant="outline">{s.language}</Badge>}
+                    {s.framework && <Badge variant="outline">{s.framework}</Badge>}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
