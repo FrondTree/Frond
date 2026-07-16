@@ -55,7 +55,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	req.Slug = normalizeSlug(req.Slug, req.Name)
 	if !slugRegex.MatchString(req.Slug) {
-		writeError(w, http.StatusBadRequest, "invalid_slug", "")
+		writeError(w, http.StatusBadRequest, "invalid_slug", "slug must be lowercase alphanumeric with hyphens")
 		return
 	}
 

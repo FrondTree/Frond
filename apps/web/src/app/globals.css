@@ -1,14 +1,112 @@
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --frond-primary: #6366f1;
-  --frond-bg: #0a0a0f;
-  --frond-surface: #12121a;
-  --frond-border: #1e1e2e;
+@layer base {
+  :root {
+    --background: 40 6% 97%;
+    --foreground: 150 8% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 150 8% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 8% 10%;
+    --primary: 152 42% 28%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 40 8% 93%;
+    --secondary-foreground: 150 8% 14%;
+    --muted: 40 8% 93%;
+    --muted-foreground: 150 4% 42%;
+    --accent: 152 18% 94%;
+    --accent-foreground: 152 42% 22%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 10% 88%;
+    --input: 40 10% 88%;
+    --ring: 152 42% 28%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 150 6% 7%;
+    --foreground: 40 8% 95%;
+    --card: 150 5% 10%;
+    --card-foreground: 40 8% 95%;
+    --popover: 150 5% 10%;
+    --popover-foreground: 40 8% 95%;
+    --primary: 152 36% 48%;
+    --primary-foreground: 150 10% 6%;
+    --secondary: 150 5% 14%;
+    --secondary-foreground: 40 8% 92%;
+    --muted: 150 5% 14%;
+    --muted-foreground: 150 4% 58%;
+    --accent: 152 16% 16%;
+    --accent-foreground: 152 30% 72%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 150 5% 18%;
+    --input: 150 5% 18%;
+    --ring: 152 36% 48%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  ::selection {
+    @apply bg-accent text-accent-foreground;
+  }
 }
 
-body {
-  @apply bg-[var(--frond-bg)] text-zinc-100 antialiased;
+@layer utilities {
+  .landing-grid {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='1' cy='1' r='1' fill='%23000000' fill-opacity='0.08'/%3E%3C/svg%3E");
+  }
+
+  .dark .landing-grid {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='1' cy='1' r='1' fill='%23ffffff' fill-opacity='0.08'/%3E%3C/svg%3E");
+  }
+
+  .landing-fade-up {
+    animation: landing-fade-up 0.7s ease-out both;
+  }
+
+  .landing-fade-up-delay {
+    animation-delay: 0.12s;
+  }
+
+  .landing-cta {
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+
+  .landing-cta:hover {
+    transform: translateY(-1px);
+  }
+
+  @keyframes landing-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .landing-fade-up,
+    .landing-fade-up-delay,
+    .landing-cta {
+      animation: none;
+      transition: none;
+    }
+  }
 }

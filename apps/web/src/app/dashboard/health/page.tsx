@@ -2,12 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardHeader } from "@/components/dashboard-header";
-import { DashboardNav } from "@/components/dashboard-nav";
-import { apiFetch, type DriftAlert, type HealthSnapshot } from "@/lib/api";
+import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError, apiFetch, asArray, type DriftAlert, type HealthSnapshot } from "@/lib/api";
 
 export default function HealthPage() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [recomputing, setRecomputing] = useState(false);
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
   const [drift, setDrift] = useState<DriftAlert[]>([]);
 
@@ -18,13 +25,22 @@ export default function HealthPage() {
       return;
     }
     const slug = localStorage.getItem("frond_selected_org");
-    if (!slug) return;
-    const [h, d] = await Promise.all([
-      apiFetch<HealthSnapshot>(`/v1/orgs/${slug}/intelligence/health`),
-      apiFetch<DriftAlert[]>(`/v1/orgs/${slug}/intelligence/drift`),
-    ]);
-    setHealth(h);
-    setDrift(d);
+    if (!slug) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const [h, d] = await Promise.all([
+        apiFetch<HealthSnapshot>(`/v1/orgs/${slug}/intelligence/health`),
+        apiFetch<DriftAlert[] | null>(`/v1/orgs/${slug}/intelligence/drift`),
+      ]);
+      setHealth(h);
+      setDrift(asArray(d));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load health");
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
   useEffect(() => {
@@ -33,72 +49,134 @@ export default function HealthPage() {
 
   async function recompute() {
     const slug = localStorage.getItem("frond_selected_org");
-    if (!slug) return;
-    const h = await apiFetch<HealthSnapshot>(`/v1/orgs/${slug}/intelligence/health/recompute`, { method: "POST" });
-    setHealth(h);
+    if (!slug || recomputing) return;
+    setRecomputing(true);
+    try {
+      const h = await apiFetch<HealthSnapshot>(`/v1/orgs/${slug}/intelligence/health/recompute`, {
+        method: "POST",
+      });
+      setHealth(h);
+      toast.success("Health recomputed");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to recompute");
+    } finally {
+      setRecomputing(false);
+    }
   }
 
   const issues = health?.issues ?? [];
 
-  return (
-    <div className="min-h-screen">
-      <DashboardHeader />
-      <main className="mx-auto max-w-6xl px-6 py-8">
-        <DashboardNav />
-        <div className="mt-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Documentation Health</h1>
-          <button onClick={() => void recompute()} className="rounded-lg border border-zinc-700 px-4 py-2 text-sm hover:bg-white/5">Recompute</button>
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
         </div>
+      </div>
+    );
+  }
 
-        {health && (
-          <div className="mt-8 grid gap-6 sm:grid-cols-3">
-            <MetricCard label="Overall Score" value={`${health.score}%`} />
-            <MetricCard label="API Coverage" value={`${health.coverage_pct}%`} sub={`${health.api_documented}/${health.api_total} documented`} />
-            <MetricCard label="Stale Pages" value={String(health.stale_pages)} />
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title="Doc health"
+        description="Coverage, stale pages, and drift alerts."
+        actions={
+          <Button variant="outline" onClick={() => void recompute()} disabled={recomputing}>
+            {recomputing ? "Recomputing…" : "Recompute"}
+          </Button>
+        }
+      />
+
+      {!health ? (
+        <EmptyState title="No health data" description="Select an organization and scan repos first." />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <MetricCard label="Overall score" value={`${health.score}%`} />
+            <MetricCard
+              label="API coverage"
+              value={`${health.coverage_pct}%`}
+              sub={`${health.api_documented}/${health.api_total} documented`}
+            />
+            <MetricCard label="Stale pages" value={String(health.stale_pages)} />
           </div>
-        )}
 
-        {health && (
-          <div className="mt-6 h-3 overflow-hidden rounded-full bg-zinc-800">
-            <div className="h-full bg-indigo-500" style={{ width: `${health.score}%` }} />
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-primary transition-[width]"
+              style={{ width: `${Math.min(100, Math.max(0, health.score))}%` }}
+            />
           </div>
-        )}
+        </>
+      )}
 
-        <section className="mt-10">
-          <h2 className="font-semibold">Issues</h2>
-          <ul className="mt-4 space-y-2">
+      <section className="space-y-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Issues</h2>
+        {(Array.isArray(issues) ? issues : []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No issues reported.</p>
+        ) : (
+          <ul className="space-y-2">
             {(Array.isArray(issues) ? issues : []).map((issue: { severity: string; message: string }, i: number) => (
-              <li key={i} className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              <li key={i} className="rounded-md border bg-muted/40 px-4 py-3 text-sm">
+                <Badge variant="warning" className="mr-2">
+                  {issue.severity || "info"}
+                </Badge>
                 {issue.message}
               </li>
             ))}
           </ul>
-        </section>
+        )}
+      </section>
 
-        <section className="mt-10">
-          <h2 className="font-semibold">Documentation Drift Alerts</h2>
-          <ul className="mt-4 space-y-3">
+      <section className="space-y-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Drift alerts</h2>
+        {drift.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No open drift alerts.</p>
+        ) : (
+          <ul className="space-y-3">
             {drift.map((a) => (
-              <li key={a.id} className="rounded-lg border border-[var(--frond-border)] bg-[var(--frond-surface)] p-4">
-                <div className="font-medium">{a.title}</div>
-                <p className="mt-1 text-sm text-zinc-400">{a.message}</p>
-                {a.pr_url && <a href={a.pr_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-indigo-400">View PR</a>}
-              </li>
+              <Card key={a.id}>
+                <CardHeader>
+                  <CardTitle className="text-base">{a.title}</CardTitle>
+                  <CardDescription>{a.message}</CardDescription>
+                </CardHeader>
+                {a.pr_url && (
+                  <CardContent>
+                    <a
+                      href={a.pr_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm underline-offset-4 hover:underline"
+                    >
+                      View pull request
+                    </a>
+                  </CardContent>
+                )}
+              </Card>
             ))}
-            {drift.length === 0 && <li className="text-sm text-zinc-500">No open drift alerts</li>}
           </ul>
-        </section>
-      </main>
+        )}
+      </section>
     </div>
   );
 }
 
 function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-[var(--frond-border)] bg-[var(--frond-surface)] p-6">
-      <div className="text-sm text-zinc-500">{label}</div>
-      <div className="mt-2 text-3xl font-bold">{value}</div>
-      {sub && <div className="mt-1 text-xs text-zinc-500">{sub}</div>}
-    </div>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardDescription>{label}</CardDescription>
+        <CardTitle className="text-3xl font-semibold tracking-tight">{value}</CardTitle>
+      </CardHeader>
+      {sub && (
+        <CardContent>
+          <p className="text-xs text-muted-foreground">{sub}</p>
+        </CardContent>
+      )}
+    </Card>
   );
 }

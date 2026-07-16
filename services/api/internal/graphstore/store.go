@@ -27,8 +27,8 @@ func New(pool *pgxpool.Pool) *Store {
 func (s *Store) UpsertGitHubConnection(ctx context.Context, orgID, userID uuid.UUID, ghUserID int64, login, token, scope string) (*models.GitHubConnection, error) {
 	var conn models.GitHubConnection
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO github_connections (organization_id, user_id, github_user_id, github_login, access_token, token_scope)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO github_connections (organization_id, user_id, github_user_id, github_login, access_token, token_scope, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW())
 		ON CONFLICT (organization_id) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
 			github_user_id = EXCLUDED.github_user_id,
@@ -73,8 +73,8 @@ func (s *Store) ConnectRepository(ctx context.Context, orgID, connID uuid.UUID, 
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO connected_repositories (
 			organization_id, github_connection_id, github_repo_id, full_name, name,
-			default_branch, html_url, description, language, linked_project_id
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			default_branch, html_url, description, language, linked_project_id, updated_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())
 		ON CONFLICT (organization_id, github_repo_id) DO UPDATE SET
 			full_name = EXCLUDED.full_name,
 			description = EXCLUDED.description,
@@ -237,8 +237,8 @@ func (s *Store) SaveScanResult(ctx context.Context, orgID uuid.UUID, repo *model
 	slug := slugify(result.ServiceName)
 	var svc models.KGService
 	err = tx.QueryRow(ctx, `
-		INSERT INTO kg_services (organization_id, repository_id, name, slug, description, language, framework, owners, metadata, linked_project_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		INSERT INTO kg_services (organization_id, repository_id, name, slug, description, language, framework, owners, metadata, linked_project_id, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())
 		ON CONFLICT (repository_id) DO UPDATE SET
 			name = EXCLUDED.name, slug = EXCLUDED.slug, description = EXCLUDED.description,
 			language = EXCLUDED.language, framework = EXCLUDED.framework,

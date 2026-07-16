@@ -19,7 +19,7 @@ model User {
   googleId     String?  @unique @map("google_id")
   passwordHash String?  @map("password_hash")
   createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
   organizationMembers OrganizationMember[]
   apiKeys           ApiKey[]
@@ -34,7 +34,7 @@ model Organization {
   slug      String   @unique
   plan      String   @default("free")
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   members              OrganizationMember[]
   projects             Project[]
@@ -93,7 +93,7 @@ model Project {
   visibility     String   @default("public")
   config         Json     @default("{}")
   createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
   organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   docVersions       DocVersion[]
@@ -157,7 +157,7 @@ model GitHubConnection {
   accessToken    String   @map("access_token")
   tokenScope     String   @default("") @map("token_scope")
   createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
   organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -182,7 +182,7 @@ model ConnectedRepository {
   lastScannedAt      DateTime? @map("last_scanned_at")
   lastScanError      String?   @map("last_scan_error")
   createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
 
   organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   githubConnection GitHubConnection @relation(fields: [githubConnectionId], references: [id], onDelete: Cascade)
@@ -230,7 +230,7 @@ model KgService {
   metadata        Json     @default("{}")
   linkedProjectId String?  @map("linked_project_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   repository   ConnectedRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)

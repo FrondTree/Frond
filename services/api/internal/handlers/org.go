@@ -83,11 +83,21 @@ func (h *OrgHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func normalizeSlug(slug, name string) string {
-	if slug != "" {
-		return strings.ToLower(slug)
+	base := slug
+	if base == "" {
+		base = name
 	}
-	s := strings.ToLower(name)
+	s := strings.ToLower(strings.TrimSpace(base))
 	s = strings.ReplaceAll(s, " ", "-")
-	s = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "_", "-")
+	s = regexp.MustCompile(`[^a-z0-9-]+`).ReplaceAllString(s, "")
+	s = regexp.MustCompile(`-+`).ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		s = "item"
+	}
+	if len(s) > 63 {
+		s = strings.Trim(s[:63], "-")
+	}
 	return s
 }

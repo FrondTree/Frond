@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardHeader } from "@/components/dashboard-header";
-import { DashboardNav } from "@/components/dashboard-nav";
-import { apiFetch, type KGService } from "@/lib/api";
+import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError, apiFetch, asArray, type KGService } from "@/lib/api";
 
 interface DepTree {
   service: KGService;
@@ -13,6 +16,7 @@ interface DepTree {
 
 export default function DependenciesPage() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const [trees, setTrees] = useState<DepTree[]>([]);
 
   const load = useCallback(async () => {
@@ -22,38 +26,72 @@ export default function DependenciesPage() {
       return;
     }
     const slug = localStorage.getItem("frond_selected_org");
-    if (!slug) return;
-    const data = await apiFetch<DepTree[]>(`/v1/orgs/${slug}/intelligence/dependencies`);
-    setTrees(data);
+    if (!slug) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const data = asArray(await apiFetch<DepTree[] | null>(`/v1/orgs/${slug}/intelligence/dependencies`));
+      setTrees(data);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load dependencies");
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-56" />
+        <Skeleton className="h-40" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen">
-      <DashboardHeader />
-      <main className="mx-auto max-w-6xl px-6 py-8">
-        <DashboardNav />
-        <h1 className="mt-8 text-2xl font-bold">Dependency Explorer</h1>
-        <div className="mt-8 space-y-6">
-          {trees.map((t) => (
-            <div key={t.service.id} className="rounded-xl border border-[var(--frond-border)] bg-[var(--frond-surface)] p-6">
-              <h3 className="font-semibold">{t.service.name}</h3>
-              <ul className="mt-4 space-y-1 font-mono text-sm">
-                {t.dependencies.map((d) => (
-                  <li key={d.name} className="text-zinc-400">
-                    <span className="text-indigo-400">{d.dep_type}</span>: {d.name}
-                    {d.version && <span className="text-zinc-600">@{d.version}</span>}
-                  </li>
-                ))}
-                {t.dependencies.length === 0 && <li className="text-zinc-600">No dependencies detected</li>}
-              </ul>
-            </div>
-          ))}
+    <div className="space-y-8">
+      <PageHeader
+        title="Dependencies"
+        description="Package and service dependencies per scanned repo."
+      />
+
+      {trees.length === 0 ? (
+        <EmptyState title="No dependency data yet" description="Scan repositories to populate dependency trees." />
+      ) : (
+        <div className="space-y-4">
+          {trees.map((t) => {
+            const deps = t.dependencies ?? [];
+            return (
+              <Card key={t.service.id}>
+                <CardHeader>
+                  <CardTitle>{t.service.name}</CardTitle>
+                  <CardDescription>{t.service.repository_name}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-1.5 font-mono text-sm">
+                    {deps.map((d) => (
+                      <li key={`${d.dep_type}-${d.name}`} className="text-muted-foreground">
+                        <span className="text-foreground">{d.dep_type}</span>
+                        <span className="mx-1.5 text-border">·</span>
+                        {d.name}
+                        {d.version && <span className="text-muted-foreground/70">@{d.version}</span>}
+                      </li>
+                    ))}
+                    {deps.length === 0 && (
+                      <li className="font-sans text-muted-foreground">No dependencies detected</li>
+                    )}
+                  </ul>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
-      </main>
+      )}
     </div>
   );
 }

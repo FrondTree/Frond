@@ -32,8 +32,8 @@ func New(pool *pgxpool.Pool) *Store {
 func (s *Store) UpsertGoogleUser(ctx context.Context, googleID, email, name, avatar string) (*models.User, error) {
 	var u models.User
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO users (email, name, avatar_url, google_id)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (email, name, avatar_url, google_id, updated_at)
+		VALUES ($1, $2, $3, $4, NOW())
 		ON CONFLICT (email) DO UPDATE SET
 			name = EXCLUDED.name,
 			avatar_url = EXCLUDED.avatar_url,
@@ -94,7 +94,7 @@ func (s *Store) CreateOrganization(ctx context.Context, userID uuid.UUID, name, 
 
 	var org models.Organization
 	err = tx.QueryRow(ctx, `
-		INSERT INTO organizations (name, slug) VALUES ($1, $2)
+		INSERT INTO organizations (name, slug, updated_at) VALUES ($1, $2, NOW())
 		RETURNING id, name, slug, plan, created_at, updated_at
 	`, name, slug).Scan(&org.ID, &org.Name, &org.Slug, &org.Plan, &org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
@@ -165,8 +165,8 @@ func (s *Store) UserOrgRole(ctx context.Context, userID, orgID uuid.UUID) (strin
 func (s *Store) CreateProject(ctx context.Context, orgID uuid.UUID, name, slug, description, visibility string, config json.RawMessage) (*models.Project, error) {
 	var p models.Project
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO projects (organization_id, name, slug, description, visibility, config)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO projects (organization_id, name, slug, description, visibility, config, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW())
 		RETURNING id, organization_id, name, slug, description, visibility, config, created_at, updated_at
 	`, orgID, name, slug, description, visibility, config).Scan(
 		&p.ID, &p.OrganizationID, &p.Name, &p.Slug, &p.Description, &p.Visibility, &p.Config, &p.CreatedAt, &p.UpdatedAt,

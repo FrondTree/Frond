@@ -2,19 +2,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardHeader } from "@/components/dashboard-header";
-import { DashboardNav } from "@/components/dashboard-nav";
-import { apiFetch, type Organization, type Project } from "@/lib/api";
+import { Copy, Github } from "lucide-react";
+import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError, apiFetch, asArray, type Organization, type Project } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
+  const [creatingOrg, setCreatingOrg] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
 
   const load = useCallback(async () => {
     const token = localStorage.getItem("frond_token");
@@ -22,117 +32,221 @@ export default function DashboardPage() {
       router.push("/login");
       return;
     }
-    const orgList = await apiFetch<Organization[]>("/v1/orgs");
-    setOrgs(orgList);
-    if (!selectedOrg && orgList[0]) setSelectedOrg(orgList[0]);
-  }, [router, selectedOrg]);
+    try {
+      const orgList = asArray(await apiFetch<Organization[] | null>("/v1/orgs"));
+      setOrgs(orgList);
+      const saved = localStorage.getItem("frond_selected_org");
+      const current = orgList.find((o) => o.slug === saved) ?? orgList[0] ?? null;
+      setSelectedOrg(current);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load organizations");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!selectedOrg) return;
-    void apiFetch<Project[]>(`/v1/orgs/${selectedOrg.slug}/projects`).then(setProjects);
+    if (!selectedOrg) {
+      setProjects([]);
+      return;
+    }
     localStorage.setItem("frond_selected_org", selectedOrg.slug);
+    setProjectsLoading(true);
+    void apiFetch<Project[] | null>(`/v1/orgs/${selectedOrg.slug}/projects`)
+      .then((data) => setProjects(asArray(data)))
+      .catch((err) => toast.error(err instanceof ApiError ? err.message : "Failed to load projects"))
+      .finally(() => setProjectsLoading(false));
   }, [selectedOrg]);
 
   async function createOrg() {
-    if (!newOrgName) return;
-    const org = await apiFetch<Organization>("/v1/orgs", {
-      method: "POST",
-      body: JSON.stringify({ name: newOrgName }),
-    });
-    setOrgs((o) => [org, ...o]);
-    setSelectedOrg(org);
-    setNewOrgName("");
+    const name = newOrgName.trim();
+    if (!name || creatingOrg) return;
+    setCreatingOrg(true);
+    try {
+      const org = await apiFetch<Organization>("/v1/orgs", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      setOrgs((o) => [org, ...o]);
+      setSelectedOrg(org);
+      setNewOrgName("");
+      toast.success(`Created organization ${org.name}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to create organization");
+    } finally {
+      setCreatingOrg(false);
+    }
   }
 
   async function createProject() {
-    if (!selectedOrg || !newProjectName) return;
-    const project = await apiFetch<Project>(`/v1/orgs/${selectedOrg.slug}/projects`, {
-      method: "POST",
-      body: JSON.stringify({ name: newProjectName, visibility: "public" }),
-    });
-    setProjects((p) => [project, ...p]);
-    setNewProjectName("");
+    const name = newProjectName.trim();
+    if (!selectedOrg || !name || creatingProject) return;
+    setCreatingProject(true);
+    try {
+      const project = await apiFetch<Project>(`/v1/orgs/${selectedOrg.slug}/projects`, {
+        method: "POST",
+        body: JSON.stringify({ name, visibility: "public" }),
+      });
+      setProjects((p) => [project, ...p]);
+      setNewProjectName("");
+      toast.success(`Created project ${project.name}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to create project");
+    } finally {
+      setCreatingProject(false);
+    }
   }
 
   function connectGitHub() {
     if (!selectedOrg) return;
-    const token = localStorage.getItem("frond_token");
     window.location.href = `${API_URL}/v1/orgs/${selectedOrg.slug}/github/connect?redirect_uri=${encodeURIComponent(window.location.origin + "/dashboard/github")}`;
-    void token;
+  }
+
+  function copyPublishCommand(projectId: string) {
+    const cmd = `frond docs publish --project-id ${projectId}`;
+    void navigator.clipboard.writeText(cmd).then(() => toast.success("Publish command copied"));
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen">
-      <DashboardHeader />
-      <main className="mx-auto max-w-6xl px-6 py-8">
-        <DashboardNav />
-        <div className="mt-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Overview</h1>
-          {selectedOrg && (
-            <button onClick={connectGitHub} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">
+    <div className="space-y-8">
+      <PageHeader
+        title="Overview"
+        description="Manage organizations and documentation projects."
+        actions={
+          selectedOrg ? (
+            <Button variant="outline" onClick={connectGitHub}>
+              <Github />
               Connect GitHub
-            </button>
-          )}
-        </div>
-        <section className="mt-8 grid gap-8 lg:grid-cols-2">
-          <OrgPanel orgs={orgs} selected={selectedOrg} onSelect={setSelectedOrg} newName={newOrgName} onNewName={setNewOrgName} onCreate={() => void createOrg()} />
-          <ProjectPanel projects={projects} newName={newProjectName} onNewName={setNewProjectName} onCreate={() => void createProject()} org={selectedOrg} />
-        </section>
-      </main>
-    </div>
-  );
-}
+            </Button>
+          ) : undefined
+        }
+      />
 
-function OrgPanel({ orgs, selected, onSelect, newName, onNewName, onCreate }: {
-  orgs: Organization[]; selected: Organization | null; onSelect: (o: Organization) => void;
-  newName: string; onNewName: (s: string) => void; onCreate: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-[var(--frond-border)] bg-[var(--frond-surface)] p-6">
-      <h2 className="font-semibold">Organizations</h2>
-      <div className="mt-4 flex gap-2">
-        <input value={newName} onChange={(e) => onNewName(e.target.value)} placeholder="New org" className="flex-1 rounded-lg border border-[var(--frond-border)] bg-[var(--frond-bg)] px-3 py-2 text-sm" />
-        <button onClick={onCreate} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm">Create</button>
-      </div>
-      <ul className="mt-4 space-y-2">
-        {orgs.map((org) => (
-          <li key={org.id}>
-            <button onClick={() => onSelect(org)} className={`w-full rounded-lg px-3 py-2 text-left text-sm ${selected?.id === org.id ? "bg-indigo-500/20 text-indigo-300" : "hover:bg-white/5"}`}>
-              {org.name} <span className="text-zinc-500">/{org.slug}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+      <section className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Organizations</CardTitle>
+            <CardDescription>Select an org to scope projects and intelligence.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                value={newOrgName}
+                onChange={(e) => setNewOrgName(e.target.value)}
+                placeholder="New organization"
+                disabled={creatingOrg}
+                onKeyDown={(e) => e.key === "Enter" && void createOrg()}
+              />
+              <Button onClick={() => void createOrg()} disabled={creatingOrg || !newOrgName.trim()}>
+                {creatingOrg ? "Creating…" : "Create"}
+              </Button>
+            </div>
+            {orgs.length === 0 ? (
+              <EmptyState title="No organizations yet" description="Create one to start publishing docs." />
+            ) : (
+              <ul className="space-y-1">
+                {orgs.map((org) => (
+                  <li key={org.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrg(org)}
+                      className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                        selectedOrg?.id === org.id ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                      }`}
+                    >
+                      <span className="font-medium">{org.name}</span>
+                      <span className="ml-2 text-muted-foreground">/{org.slug}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
-function ProjectPanel({ projects, newName, onNewName, onCreate, org }: {
-  projects: Project[]; newName: string; onNewName: (s: string) => void; onCreate: () => void; org: Organization | null;
-}) {
-  return (
-    <div className="rounded-xl border border-[var(--frond-border)] bg-[var(--frond-surface)] p-6">
-      <h2 className="font-semibold">Documentation Projects</h2>
-      {org && (
-        <>
-          <div className="mt-4 flex gap-2">
-            <input value={newName} onChange={(e) => onNewName(e.target.value)} placeholder="New project" className="flex-1 rounded-lg border border-[var(--frond-border)] bg-[var(--frond-bg)] px-3 py-2 text-sm" />
-            <button onClick={onCreate} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm">Create</button>
-          </div>
-          <ul className="mt-4 space-y-3">
-            {projects.map((p) => (
-              <li key={p.id} className="rounded-lg border border-[var(--frond-border)] bg-[var(--frond-bg)] p-4">
-                <div className="font-medium">{p.name}</div>
-                <code className="mt-2 block text-xs text-zinc-400">frond docs publish --project-id {p.id}</code>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Documentation projects</CardTitle>
+            <CardDescription>
+              {selectedOrg ? `Projects in ${selectedOrg.name}` : "Select an organization first"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!selectedOrg ? (
+              <EmptyState title="No organization selected" description="Create or select an organization to continue." />
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    placeholder="New project"
+                    disabled={creatingProject}
+                    onKeyDown={(e) => e.key === "Enter" && void createProject()}
+                  />
+                  <Button
+                    onClick={() => void createProject()}
+                    disabled={creatingProject || !newProjectName.trim()}
+                  >
+                    {creatingProject ? "Creating…" : "Create"}
+                  </Button>
+                </div>
+                {projectsLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-16" />
+                    <Skeleton className="h-16" />
+                  </div>
+                ) : projects.length === 0 ? (
+                  <EmptyState
+                    title="No projects yet"
+                    description="Create a documentation project, then publish with the CLI."
+                  />
+                ) : (
+                  <ul className="space-y-3">
+                    {projects.map((p) => (
+                      <li key={p.id} className="rounded-md border p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{p.name}</div>
+                            <p className="mt-0.5 text-xs text-muted-foreground">/{p.slug}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Copy publish command"
+                            onClick={() => copyPublishCommand(p.id)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <code className="mt-3 block overflow-x-auto rounded-md bg-muted px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                          frond docs publish --project-id {p.id}
+                        </code>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

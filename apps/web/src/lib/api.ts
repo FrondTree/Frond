@@ -11,6 +11,18 @@ export function clearSession(): void {
   localStorage.removeItem("frond_selected_org");
 }
 
+export class ApiError extends Error {
+  status: number;
+  code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -21,10 +33,26 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       ...init?.headers,
     },
   });
+
   if (!res.ok) {
-    throw new Error(await res.text());
+    let code = "request_failed";
+    let message = res.statusText || "Request failed";
+    try {
+      const body = (await res.json()) as { error?: string; message?: string };
+      code = body.error ?? code;
+      message = body.message || message;
+    } catch {
+      /* ignore non-json */
+    }
+    throw new ApiError(res.status, code, message);
   }
+
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+export function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
 export interface Organization {
