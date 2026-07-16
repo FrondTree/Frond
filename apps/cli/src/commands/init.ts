@@ -31,10 +31,13 @@ export async function initCommand() {
 
     spinner.succeed("Frond project initialized");
     console.log(chalk.dim("\nNext steps:"));
-    console.log(`  ${chalk.cyan("frond docs dev")}     Preview locally`);
-    console.log(`  ${chalk.cyan("frond validate")}     Check configuration`);
-    console.log(`  ${chalk.cyan("frond login")}        Authenticate`);
-    console.log(`  ${chalk.cyan("frond docs publish")} Deploy to Frond cloud\n`);
+    console.log(`  1. Create a project in the Frond dashboard (Overview)`);
+    console.log(`  2. Create an API key (Dashboard → API keys)`);
+    console.log(`  3. ${chalk.cyan("frond login --api-key frond_...")}`);
+    console.log(`  4. Add projectId to frond/frond.config.json`);
+    console.log(`  5. ${chalk.cyan("frond docs publish")}`);
+    console.log(`     or ${chalk.cyan("frond docs publish --project-id <uuid>")}\n`);
+    console.log(`  Preview: ${chalk.cyan("frond docs dev")}  ·  Check: ${chalk.cyan("frond validate")}\n`);
   } catch (err) {
     spinner.fail("Failed to initialize");
     throw err;

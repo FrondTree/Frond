@@ -8,7 +8,10 @@ import (
 
 	"github.com/frond-dev/frond/services/api/internal/auth"
 	"github.com/frond-dev/frond/services/api/internal/middleware"
+	"github.com/frond-dev/frond/services/api/internal/models"
 	"github.com/frond-dev/frond/services/api/internal/store"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type AuthHandler struct {
@@ -168,6 +171,29 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.createAPIKey(w, r, userID, orgID, req.Name)
+}
+
+func (h *AuthHandler) CreateOrgAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "")
+		return
+	}
+	orgSlug := chi.URLParam(r, "orgSlug")
+	org, err := h.Store.GetOrganizationBySlug(r.Context(), orgSlug)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "org_not_found", "")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	_ = decodeJSON(r, &req)
+	h.createAPIKey(w, r, userID, org.ID, req.Name)
+}
+
+func (h *AuthHandler) createAPIKey(w http.ResponseWriter, r *http.Request, userID, orgID uuid.UUID, name string) {
 	role, err := h.Store.UserOrgRole(r.Context(), userID, orgID)
 	if err != nil || (role != "owner" && role != "admin") {
 		writeError(w, http.StatusForbidden, "forbidden", "")
@@ -179,10 +205,8 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "key_error", err.Error())
 		return
 	}
-
-	name := req.Name
 	if name == "" {
-		name = "default"
+		name = "CLI / CI"
 	}
 
 	key, err := h.Store.CreateAPIKey(r.Context(), userID, orgID, name, hash, prefix)
@@ -195,4 +219,65 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		"key":    key,
 		"secret": raw,
 	})
+}
+
+func (h *AuthHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "")
+		return
+	}
+	orgSlug := chi.URLParam(r, "orgSlug")
+	org, err := h.Store.GetOrganizationBySlug(r.Context(), orgSlug)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "org_not_found", "")
+		return
+	}
+	role, err := h.Store.UserOrgRole(r.Context(), userID, org.ID)
+	if err != nil || (role != "owner" && role != "admin") {
+		writeError(w, http.StatusForbidden, "forbidden", "")
+		return
+	}
+	keys, err := h.Store.ListAPIKeys(r.Context(), org.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if keys == nil {
+		keys = []models.APIKey{}
+	}
+	writeJSON(w, http.StatusOK, keys)
+}
+
+func (h *AuthHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "")
+		return
+	}
+	orgSlug := chi.URLParam(r, "orgSlug")
+	org, err := h.Store.GetOrganizationBySlug(r.Context(), orgSlug)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "org_not_found", "")
+		return
+	}
+	role, err := h.Store.UserOrgRole(r.Context(), userID, org.ID)
+	if err != nil || (role != "owner" && role != "admin") {
+		writeError(w, http.StatusForbidden, "forbidden", "")
+		return
+	}
+	keyID, err := parseUUID(chi.URLParam(r, "keyID"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_key_id", "")
+		return
+	}
+	if err := h.Store.DeleteAPIKey(r.Context(), org.ID, keyID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

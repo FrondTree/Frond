@@ -143,14 +143,19 @@ func (h *GitHubHandler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	configured := h.GitHubOAuth != nil
 	conn, err := h.Graph.GetGitHubConnection(r.Context(), org.ID)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"connected": false})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"connected":  false,
+			"configured": configured,
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"connected": true,
-		"login":     conn.GitHubLogin,
+		"connected":  true,
+		"configured": configured,
+		"login":      conn.GitHubLogin,
 	})
 }
 

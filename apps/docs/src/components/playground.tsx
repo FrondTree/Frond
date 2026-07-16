@@ -107,23 +107,22 @@ export function Playground({ method, path, baseUrl, authType = "bearer", environ
     }
   }
 
+  const field =
+    "mt-1 w-full rounded-lg border border-docs-border bg-docs-bg px-3 py-2 text-sm text-docs-fg outline-none transition-colors focus:border-docs-accent/50 focus:ring-2 focus:ring-docs-accent/15";
+
   return (
-    <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50">
-      <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 px-4 py-3">
-        <Play className="h-4 w-4 text-emerald-400" />
-        <span className="text-sm font-medium">Try it</span>
+    <div className="mt-8 overflow-hidden rounded-xl border border-docs-border bg-docs-card shadow-sm">
+      <div className="flex flex-wrap items-center gap-3 border-b border-docs-border bg-docs-sidebar px-4 py-3">
+        <Play className="h-4 w-4 text-docs-accent" />
+        <span className="text-sm font-semibold text-docs-fg">Try it</span>
         <span className={cn("rounded px-2 py-0.5 text-xs font-bold", methodColor(method))}>{method}</span>
-        <code className="text-sm text-zinc-400">{path}</code>
+        <code className="font-mono text-sm text-docs-muted">{path}</code>
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-2">
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-zinc-500">Environment</label>
-            <select
-              value={envName}
-              onChange={(e) => setEnvName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-            >
+            <label className="text-xs font-medium text-docs-muted">Environment</label>
+            <select value={envName} onChange={(e) => setEnvName(e.target.value)} className={field}>
               {envs.map((e) => (
                 <option key={e.name} value={e.name}>
                   {e.name}
@@ -132,19 +131,15 @@ export function Playground({ method, path, baseUrl, authType = "bearer", environ
             </select>
           </div>
           <div>
-            <label className="text-xs text-zinc-500">Base URL</label>
-            <input
-              value={customBase}
-              onChange={(e) => setCustomBase(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-            />
+            <label className="text-xs font-medium text-docs-muted">Base URL</label>
+            <input value={customBase} onChange={(e) => setCustomBase(e.target.value)} className={field} />
           </div>
           <div>
-            <label className="text-xs text-zinc-500">Auth preset</label>
+            <label className="text-xs font-medium text-docs-muted">Auth preset</label>
             <select
               value={authMode}
               onChange={(e) => setAuthMode(e.target.value as typeof authMode)}
-              className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              className={field}
             >
               <option value="bearer">Bearer token</option>
               <option value="api-key">API key</option>
@@ -157,7 +152,7 @@ export function Playground({ method, path, baseUrl, authType = "bearer", environ
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="Bearer token"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              className={field}
             />
           )}
           {authMode === "api-key" && (
@@ -165,7 +160,7 @@ export function Playground({ method, path, baseUrl, authType = "bearer", environ
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="API key"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              className={field}
             />
           )}
           {authMode === "basic" && (
@@ -174,14 +169,14 @@ export function Playground({ method, path, baseUrl, authType = "bearer", environ
                 value={basicUser}
                 onChange={(e) => setBasicUser(e.target.value)}
                 placeholder="Username"
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                className={field}
               />
               <input
                 type="password"
                 value={basicPass}
                 onChange={(e) => setBasicPass(e.target.value)}
                 placeholder="Password"
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                className={field}
               />
             </div>
           )}
@@ -190,29 +185,29 @@ export function Playground({ method, path, baseUrl, authType = "bearer", environ
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={8}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm"
+              className={`${field} font-mono`}
             />
           )}
           <button
             onClick={() => void send()}
             disabled={loading}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-lg bg-docs-accent px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-docs-accent-fg disabled:opacity-50"
           >
             {loading ? "Sending…" : "Send Request"}
           </button>
         </div>
         <div>
-          <div className="flex items-center gap-3 text-xs text-zinc-500">
+          <div className="flex items-center gap-3 text-xs font-medium text-docs-muted">
             {status !== null && <span>Status: {status}</span>}
             {duration !== null && <span>Time: {duration}ms</span>}
           </div>
-          <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-zinc-950 p-4 font-mono text-xs text-zinc-300">
+          <pre className="mt-2 max-h-64 overflow-auto rounded-lg border border-docs-border bg-docs-code p-4 font-mono text-xs text-docs-fg">
             {response ?? "Response will appear here"}
           </pre>
           {history.length > 0 && (
             <div className="mt-4">
-              <div className="text-xs font-medium text-zinc-500">Recent requests</div>
-              <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs text-zinc-400">
+              <div className="text-xs font-medium text-docs-muted">Recent requests</div>
+              <ul className="mt-2 max-h-40 space-y-1 overflow-auto font-mono text-xs text-docs-muted">
                 {history.map((h) => (
                   <li key={h.id}>
                     {h.method} {h.path} · {h.status} · {h.duration}ms

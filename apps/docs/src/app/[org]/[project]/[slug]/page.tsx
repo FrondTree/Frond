@@ -1,5 +1,5 @@
 import { DocsUnavailable } from "@/components/docs-unavailable";
-import { DocsSidebar } from "@/components/sidebar";
+import { DocsShell } from "@/components/docs-shell";
 import { MdxContent } from "@/components/mdx-content";
 import { fetchPublishedDocs } from "@/lib/api";
 import { notFound } from "next/navigation";
@@ -20,13 +20,10 @@ export default async function GuidePage({
   if (!page) notFound();
 
   return (
-    <div className="flex min-h-screen">
-      <Suspense fallback={<aside className="w-72 border-r border-zinc-800" />}>
-        <DocsSidebar org={org} project={project} manifest={result.data.manifest} />
-      </Suspense>
-      <main className="flex-1 overflow-auto p-8">
+    <Suspense fallback={<div className="min-h-screen docs-grid" />}>
+      <DocsShell org={org} project={project} manifest={result.data.manifest}>
         <MdxContent source={page.content} />
-      </main>
-    </div>
+      </DocsShell>
+    </Suspense>
   );
 }

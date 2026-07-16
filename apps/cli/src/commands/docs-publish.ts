@@ -1,5 +1,4 @@
 import { readFile, rm } from "node:fs/promises";
-import path from "node:path";
 import chalk from "chalk";
 import ora from "ora";
 import { compileProject } from "@frond/compiler";
@@ -9,26 +8,34 @@ import { findFrondRoot } from "../find-root.js";
 import { authHeader, loadCredentials } from "../utils.js";
 
 export async function docsPublishCommand(opts: { projectId?: string }) {
-  if (!opts.projectId) {
-    throw new Error("--project-id is required. Create a project in the Frond dashboard first.");
-  }
-
   const root = await findFrondRoot();
-  if (!root) throw new Error("No frond/ directory found.");
+  if (!root) throw new Error("No frond/ directory found. Run `frond init` first.");
 
   const creds = await loadCredentials();
   if (!creds.token && !creds.apiKey) {
-    throw new Error("Not authenticated. Run `frond login` first.");
+    throw new Error(
+      "Not authenticated. Create an API key in Dashboard → API keys, then run:\n" +
+        "  frond login --api-key frond_...\n" +
+        "Or set FROND_API_KEY in the environment.",
+    );
+  }
+
+  const { docs, frond } = await loadProjectConfig(root);
+  const projectId = opts.projectId || (frond as { projectId?: string }).projectId;
+  if (!projectId) {
+    throw new Error(
+      "Project ID required. Pass --project-id <uuid> or set projectId in frond/frond.config.json\n" +
+        "Copy the ID from Dashboard → Overview.",
+    );
   }
 
   const spinner = ora("Compiling documentation").start();
-  const { docs, frond } = await loadProjectConfig(root);
   const { manifest, openapiHash, bundleFiles } = await compileProject(root, docs);
 
   const bundlePath = await createTarGzBundle(bundleFiles);
   const bundle = await readFile(bundlePath);
 
-  spinner.text = "Publishing to Frond cloud";
+  spinner.text = "Publishing to Frond";
 
   const form = new FormData();
   form.append("manifest", JSON.stringify(manifest));
@@ -36,7 +43,7 @@ export async function docsPublishCommand(opts: { projectId?: string }) {
   form.append("openapi_hash", openapiHash);
   form.append("bundle", new Blob([bundle]), "bundle.tar.gz");
 
-  const res = await fetch(`${creds.apiUrl}/v1/projects/${opts.projectId}/publish`, {
+  const res = await fetch(`${creds.apiUrl}/v1/projects/${projectId}/publish`, {
     method: "POST",
     headers: authHeader(creds),
     body: form,

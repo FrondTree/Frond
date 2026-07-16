@@ -30,12 +30,13 @@ model User {
 }
 
 model Organization {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  slug      String   @unique
-  plan      String   @default("free")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  slug          String   @unique
+  plan          String   @default("free")
+  docsSubdomain String?  @map("docs_subdomain")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
 
   members              OrganizationMember[]
   invites              OrgInvite[]

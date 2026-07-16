@@ -14,35 +14,47 @@ function previewHTML(port: number): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Frond Docs Dev</title>
   <style>
-    :root { --bg:#fafafa; --fg:#141816; --muted:#66706a; --border:#e5e7e5; --card:#fff; --primary:#2d6a4f; --accent:#e8f2ec; }
+    :root {
+      --bg:#f4f6fa; --fg:#141a24; --muted:#5b6578; --border:#d8dee9; --card:#ffffff;
+      --sidebar:#eef1f7; --primary:#2563eb; --accent:#e8effc; --code:#eef2f8;
+    }
     @media (prefers-color-scheme: dark) {
-      :root { --bg:#111413; --fg:#f4f4f3; --muted:#9aa39d; --border:#2a2e2c; --card:#171a18; --primary:#52b788; --accent:#1a2e24; }
+      :root {
+        --bg:#0d1118; --fg:#eef2f8; --muted:#93a0b5; --border:#243044; --card:#141a24;
+        --sidebar:#111722; --primary:#60a5fa; --accent:#1a2740; --code:#161d2a;
+      }
     }
     * { box-sizing: border-box; }
-    body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-    .layout { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
-    aside { border-right:1px solid var(--border); background:var(--card); padding:1rem; overflow:auto; }
-    main { padding:2rem; max-width:820px; }
+    body {
+      margin:0; font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+      background:var(--bg); color:var(--fg);
+      background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37,99,235,.12), transparent 55%);
+    }
+    .layout { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
+    aside { border-right:1px solid var(--border); background:var(--sidebar); padding:1.1rem; overflow:auto; }
+    main { padding:2.25rem; max-width:820px; animation: fade .35s ease-out; }
+    @keyframes fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
     a { color:inherit; text-decoration:none; }
-    .brand { font-weight:600; margin-bottom:1rem; }
-    .nav a { display:block; padding:.4rem .6rem; border-radius:6px; color:var(--muted); font-size:.875rem; }
-    .nav a:hover, .nav a.active { background:var(--accent); color:var(--fg); }
-    .section { margin-top:1rem; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
-    h1 { font-size:1.75rem; margin:0 0 .75rem; }
+    .brand { font-weight:600; margin-bottom:1rem; letter-spacing:-.02em; }
+    .brand span.frond { color:var(--primary); }
+    .nav a { display:block; padding:.45rem .65rem; border-radius:8px; color:var(--muted); font-size:.875rem; }
+    .nav a:hover, .nav a.active { background:var(--accent); color:var(--primary); font-weight:500; }
+    .section { margin-top:1.1rem; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:500; }
+    h1 { font-size:1.85rem; margin:0 0 .75rem; letter-spacing:-.02em; }
     .muted { color:var(--muted); }
-    pre, code { font-family: ui-monospace, monospace; }
-    pre { background:var(--accent); border:1px solid var(--border); border-radius:8px; padding:1rem; overflow:auto; }
-    .method { font-size:.7rem; font-weight:700; padding:.15rem .4rem; border-radius:4px; background:var(--accent); color:var(--primary); }
-    #search { width:100%; margin-bottom:1rem; padding:.5rem .75rem; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--fg); }
+    pre, code { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    pre { background:var(--code); border:1px solid var(--border); border-radius:10px; padding:1rem; overflow:auto; }
+    .method { font-size:.7rem; font-weight:700; padding:.15rem .45rem; border-radius:5px; background:var(--accent); color:var(--primary); }
+    #search { width:100%; margin-bottom:1rem; padding:.55rem .75rem; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--fg); box-shadow:0 1px 2px rgba(0,0,0,.03); }
     .bar { display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; }
-    .badge { font-size:.7rem; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:.15rem .5rem; }
+    .badge { font-size:.7rem; color:var(--muted); border:1px solid var(--border); border-radius:6px; padding:.15rem .5rem; background:var(--card); }
     @media (max-width:800px) { .layout { grid-template-columns:1fr; } aside { border-right:0; border-bottom:1px solid var(--border); } }
   </style>
 </head>
 <body>
   <div class="layout">
     <aside>
-      <div class="brand">Frond Docs <span class="badge">dev :${port}</span></div>
+      <div class="brand"><span class="frond">Frond</span> Docs <span class="badge">dev :${port}</span></div>
       <input id="search" placeholder="Search docs… (⌘K)" />
       <nav class="nav" id="nav"></nav>
     </aside>

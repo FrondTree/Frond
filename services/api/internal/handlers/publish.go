@@ -298,20 +298,49 @@ func (h *DocsHandler) ResolveDomain(w http.ResponseWriter, r *http.Request) {
 	if host == "" {
 		host = r.Host
 	}
+	host = strings.ToLower(strings.Split(host, ":")[0])
+
 	org, project, dep, err := h.Store.ResolveCustomDomain(r.Context(), host)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "domain_not_found", "")
-			return
-		}
+	if err == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"organization": org,
+			"project":      project,
+			"deployment":   dep,
+			"path":         "/" + org.Slug + "/" + project.Slug,
+			"mode":         "custom_domain",
+		})
+		return
+	}
+	if !errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	hosted := store.HostedDomain()
+	if hosted == "" {
+		hosted = "frond.dev"
+	}
+	var sub string
+	if strings.HasSuffix(host, "."+hosted) {
+		sub = strings.TrimSuffix(host, "."+hosted)
+	} else if strings.HasSuffix(host, ".localhost") {
+		sub = strings.TrimSuffix(host, ".localhost")
+	}
+	if sub == "" || strings.Contains(sub, ".") {
+		writeError(w, http.StatusNotFound, "domain_not_found", "")
+		return
+	}
+
+	org, err = h.Store.GetOrganizationByDocsSubdomain(r.Context(), sub)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "domain_not_found", "")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"organization": org,
-		"project":      project,
-		"deployment":   dep,
-		"path":         "/" + org.Slug + "/" + project.Slug,
+		"path":         "/" + org.Slug,
+		"mode":         "company_subdomain",
+		"subdomain":    sub,
 	})
 }
 

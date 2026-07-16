@@ -59,6 +59,7 @@ export interface Organization {
   id: string;
   name: string;
   slug: string;
+  docs_subdomain?: string;
   role?: string;
 }
 

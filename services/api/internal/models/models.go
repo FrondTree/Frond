@@ -19,13 +19,14 @@ type User struct {
 }
 
 type Organization struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	Plan      string    `json:"plan"`
-	Role      string    `json:"role,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Slug          string    `json:"slug"`
+	Plan          string    `json:"plan"`
+	DocsSubdomain string    `json:"docs_subdomain,omitempty"`
+	Role          string    `json:"role,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type Project struct {

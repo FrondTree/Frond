@@ -1,3 +1,89 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Ink + cobalt — distinct from Fern’s forest green */
+  :root {
+    --docs-bg: 220 24% 97%;
+    --docs-fg: 222 32% 12%;
+    --docs-muted: 220 12% 42%;
+    --docs-border: 220 16% 88%;
+    --docs-card: 0 0% 100%;
+    --docs-sidebar: 220 22% 96%;
+    --docs-accent: 217 78% 48%;
+    --docs-accent-soft: 214 80% 95%;
+    --docs-accent-fg: 217 78% 36%;
+    --docs-code: 220 20% 95%;
+    --docs-ring: 217 78% 48%;
+    --docs-glow: 217 90% 60%;
+    --docs-surface: 220 30% 99%;
+  }
+
+  .dark {
+    --docs-bg: 222 28% 7%;
+    --docs-fg: 210 20% 96%;
+    --docs-muted: 215 12% 62%;
+    --docs-border: 220 16% 18%;
+    --docs-card: 222 24% 10%;
+    --docs-sidebar: 222 26% 9%;
+    --docs-accent: 213 92% 66%;
+    --docs-accent-soft: 217 40% 16%;
+    --docs-accent-fg: 213 92% 78%;
+    --docs-code: 222 22% 12%;
+    --docs-ring: 213 92% 66%;
+    --docs-glow: 213 100% 70%;
+    --docs-surface: 222 26% 8%;
+  }
+
+  * {
+    @apply border-[hsl(var(--docs-border))];
+  }
+
+  html {
+    @apply scroll-smooth antialiased;
+  }
+
+  body {
+    @apply bg-[hsl(var(--docs-bg))] text-[hsl(var(--docs-fg))];
+  }
+
+  ::selection {
+    @apply bg-[hsl(var(--docs-accent-soft))] text-[hsl(var(--docs-accent-fg))];
+  }
+}
+
+@layer utilities {
+  .docs-atmosphere {
+    background-color: hsl(var(--docs-bg));
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--docs-glow) / 0.14), transparent 55%),
+      radial-gradient(ellipse 40% 30% at 100% 0%, hsl(var(--docs-accent) / 0.06), transparent 50%);
+  }
+
+  .dark .docs-atmosphere {
+    background-image:
+      radial-gradient(ellipse 70% 45% at 50% -15%, hsl(var(--docs-glow) / 0.12), transparent 55%),
+      radial-gradient(ellipse 35% 25% at 100% 0%, hsl(var(--docs-accent) / 0.08), transparent 45%);
+  }
+
+  .docs-fade-in {
+    animation: docs-fade-in 0.4s ease-out both;
+  }
+
+  .docs-header-blur {
+    background: hsl(var(--docs-bg) / 0.78);
+    backdrop-filter: blur(14px) saturate(1.2);
+  }
+
+  @keyframes docs-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

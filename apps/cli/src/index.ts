@@ -8,7 +8,7 @@ import { docsDevCommand } from "./commands/docs-dev.js";
 import { docsPublishCommand } from "./commands/docs-publish.js";
 import { docsBuildCommand } from "./commands/docs-build.js";
 import { generateCommand } from "./commands/generate.js";
-import { loginCommand } from "./commands/login.js";
+import { loginCommand, whoamiCommand } from "./commands/login.js";
 import { diffCommand } from "./commands/diff.js";
 
 const program = new Command();
@@ -35,9 +35,16 @@ program
 
 program
   .command("login")
-  .description("Authenticate with Frond cloud via Google")
+  .description("Authenticate with Frond (API key, token, or Google)")
   .option("--api-url <url>", "Frond API URL", process.env.FROND_API_URL ?? "http://localhost:8080")
+  .option("--api-key <key>", "Frond API key (frond_…)")
+  .option("--token <jwt>", "JWT from dashboard login")
   .action(loginCommand);
+
+program
+  .command("whoami")
+  .description("Show current Frond credentials")
+  .action(whoamiCommand);
 
 const docs = program.command("docs").description("Documentation commands");
 

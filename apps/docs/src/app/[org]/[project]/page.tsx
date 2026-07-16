@@ -1,5 +1,5 @@
 import { DocsUnavailable } from "@/components/docs-unavailable";
-import { DocsSidebar } from "@/components/sidebar";
+import { DocsShell } from "@/components/docs-shell";
 import { MdxContent } from "@/components/mdx-content";
 import { fetchPublishedDocs } from "@/lib/api";
 import { Suspense } from "react";
@@ -19,13 +19,10 @@ export default async function ProjectHome({
   const landing = manifest.pages.find((p) => p.type === "landing") ?? manifest.pages[0];
 
   return (
-    <div className="flex min-h-screen">
-      <Suspense fallback={<aside className="w-72 border-r border-zinc-800" />}>
-        <DocsSidebar org={org} project={project} manifest={manifest} />
-      </Suspense>
-      <main className="flex-1 overflow-auto p-8">
+    <Suspense fallback={<div className="min-h-screen docs-grid" />}>
+      <DocsShell org={org} project={project} manifest={manifest}>
         <MdxContent source={landing?.content ?? "# Documentation"} />
-      </main>
-    </div>
+      </DocsShell>
+    </Suspense>
   );
 }

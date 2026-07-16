@@ -8,6 +8,8 @@ import {
   Boxes,
   GitBranch,
   Github,
+  Globe,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Network,
@@ -23,7 +25,9 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/docs", label: "Docs guide", icon: BookOpen },
+  { href: "/dashboard/api-keys", label: "API keys", icon: KeyRound },
   { href: "/dashboard/github", label: "GitHub", icon: Github },
+  { href: "/dashboard/hosting", label: "Hosting", icon: Globe },
   { href: "/dashboard/architecture", label: "Architecture", icon: Network },
   { href: "/dashboard/services", label: "Services", icon: Boxes },
   { href: "/dashboard/dependencies", label: "Dependencies", icon: GitBranch },

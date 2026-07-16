@@ -79,29 +79,41 @@ export default function DocsGuidePage() {
           </div>
         </Step>
 
-        <Step n={4} title="Authenticate">
+        <Step n={4} title="Authenticate with an API key">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Demo user is <code className="rounded bg-muted px-1.5 py-0.5 text-xs">demo</code> /{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 text-xs">demo</code>. Set a token in PowerShell:
+            Create a key under{" "}
+            <Link href="/dashboard/api-keys" className="text-foreground underline-offset-2 hover:underline">
+              API keys
+            </Link>
+            , then save it to the CLI (Fern-style):
           </p>
           <CopyCommand
-            command={`$login = Invoke-RestMethod -Method POST -Uri http://localhost:8080/v1/auth/login -ContentType application/json -Body '{"username":"demo","password":"demo"}'; $env:FROND_TOKEN = $login.token; $env:FROND_API_URL = "http://localhost:8080"`}
-            className="w-full justify-between text-xs"
+            command="node apps/cli/dist/index.js login --api-key frond_YOUR_KEY"
+            className="w-full justify-between"
           />
           <p className="text-sm text-muted-foreground">
-            For CI, use <code className="rounded bg-muted px-1.5 py-0.5 text-xs">FROND_API_KEY</code> instead.
+            Or set <code className="rounded bg-muted px-1.5 py-0.5 text-xs">FROND_API_KEY</code> in CI.
+            Demo JWT still works via{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 text-xs">FROND_TOKEN</code>.
           </p>
         </Step>
 
         <Step n={5} title="Publish">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Replace <code className="rounded bg-muted px-1.5 py-0.5 text-xs">&lt;uuid&gt;</code> with your
-            project ID from Overview. Creating a project alone does not publish docs.
+            Add <code className="rounded bg-muted px-1.5 py-0.5 text-xs">projectId</code> to{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 text-xs">frond/frond.config.json</code>{" "}
+            (UUID from Overview), or pass it on the command line.
           </p>
-          <CopyCommand
-            command="node apps/cli/dist/index.js docs publish --project-id <uuid>"
-            className="w-full justify-between"
-          />
+          <div className="space-y-3">
+            <CopyCommand
+              command='node apps/cli/dist/index.js docs publish'
+              className="w-full justify-between"
+            />
+            <CopyCommand
+              command="node apps/cli/dist/index.js docs publish --project-id <uuid>"
+              className="w-full justify-between"
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <Button variant="outline" size="sm" asChild>
               <a href="http://localhost:3001" target="_blank" rel="noreferrer">
@@ -109,9 +121,9 @@ export default function DocsGuidePage() {
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </Button>
-            <span className="text-xs text-muted-foreground">
-              http://localhost:3001/&#123;org&#125;/&#123;project&#125;
-            </span>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard/api-keys">Manage API keys</Link>
+            </Button>
           </div>
         </Step>
       </div>

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -96,9 +96,9 @@ func (s *Store) CreateOrganization(ctx context.Context, userID uuid.UUID, name, 
 
 	var org models.Organization
 	err = tx.QueryRow(ctx, `
-		INSERT INTO organizations (name, slug, updated_at) VALUES ($1, $2, NOW())
-		RETURNING id, name, slug, plan, created_at, updated_at
-	`, name, slug).Scan(&org.ID, &org.Name, &org.Slug, &org.Plan, &org.CreatedAt, &org.UpdatedAt)
+		INSERT INTO organizations (name, slug, docs_subdomain, updated_at) VALUES ($1, $2, $2, NOW())
+		RETURNING id, name, slug, plan, COALESCE(docs_subdomain, slug), created_at, updated_at
+	`, name, slug).Scan(&org.ID, &org.Name, &org.Slug, &org.Plan, &org.DocsSubdomain, &org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (s *Store) CreateOrganization(ctx context.Context, userID uuid.UUID, name, 
 
 func (s *Store) ListOrganizations(ctx context.Context, userID uuid.UUID) ([]models.Organization, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT o.id, o.name, o.slug, o.plan, om.role, o.created_at, o.updated_at
+		SELECT o.id, o.name, o.slug, o.plan, COALESCE(o.docs_subdomain, o.slug), om.role, o.created_at, o.updated_at
 		FROM organizations o
 		JOIN organization_members om ON om.organization_id = o.id
 		WHERE om.user_id = $1
@@ -134,7 +134,7 @@ func (s *Store) ListOrganizations(ctx context.Context, userID uuid.UUID) ([]mode
 	var orgs []models.Organization
 	for rows.Next() {
 		var o models.Organization
-		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.Role, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.DocsSubdomain, &o.Role, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, err
 		}
 		orgs = append(orgs, o)
@@ -145,8 +145,9 @@ func (s *Store) ListOrganizations(ctx context.Context, userID uuid.UUID) ([]mode
 func (s *Store) GetOrganizationBySlug(ctx context.Context, slug string) (*models.Organization, error) {
 	var o models.Organization
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, slug, plan, created_at, updated_at FROM organizations WHERE slug = $1
-	`, slug).Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.CreatedAt, &o.UpdatedAt)
+		SELECT id, name, slug, plan, COALESCE(docs_subdomain, slug), created_at, updated_at
+		FROM organizations WHERE slug = $1
+	`, slug).Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.DocsSubdomain, &o.CreatedAt, &o.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -261,6 +262,41 @@ func (s *Store) CreateAPIKey(ctx context.Context, userID, orgID uuid.UUID, name,
 	return &k, err
 }
 
+func (s *Store) ListAPIKeys(ctx context.Context, orgID uuid.UUID) ([]models.APIKey, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, user_id, organization_id, name, key_prefix, last_used_at, created_at
+		FROM api_keys
+		WHERE organization_id = $1
+		ORDER BY created_at DESC
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []models.APIKey
+	for rows.Next() {
+		var k models.APIKey
+		if err := rows.Scan(&k.ID, &k.UserID, &k.OrganizationID, &k.Name, &k.KeyPrefix, &k.LastUsedAt, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
+func (s *Store) DeleteAPIKey(ctx context.Context, orgID, keyID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM api_keys WHERE id = $1 AND organization_id = $2
+	`, keyID, orgID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) GetUserByAPIKey(ctx context.Context, keyHash string) (uuid.UUID, uuid.UUID, error) {
 	var userID, orgID uuid.UUID
 	err := s.pool.QueryRow(ctx, `
@@ -304,22 +340,28 @@ func (s *Store) PublishDocVersion(ctx context.Context, projectID uuid.UUID, vers
 	if err != nil {
 		return nil, nil, err
 	}
-	err = tx.QueryRow(ctx, `SELECT slug FROM organizations WHERE id = $1`, p.OrganizationID).Scan(&org.Slug)
+	err = tx.QueryRow(ctx, `
+		SELECT slug, COALESCE(docs_subdomain, slug) FROM organizations WHERE id = $1
+	`, p.OrganizationID).Scan(&org.Slug, &org.DocsSubdomain)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	docsBase := os.Getenv("DOCS_PUBLIC_URL")
-	if docsBase == "" {
-		docsBase = "http://localhost:3001"
-	}
-	url := fmt.Sprintf("%s/%s/%s", strings.TrimRight(docsBase, "/"), org.Slug, p.Slug)
+	// Carry forward custom domain from previous deployment if any
+	var prevDomain *string
+	_ = tx.QueryRow(ctx, `
+		SELECT custom_domain FROM deployments
+		WHERE project_id = $1 AND custom_domain IS NOT NULL AND custom_domain <> ''
+		ORDER BY created_at DESC LIMIT 1
+	`, projectID).Scan(&prevDomain)
+
+	url := DocsPublicURL(org.DocsSubdomain, p.Slug)
 	var dep models.Deployment
 	err = tx.QueryRow(ctx, `
-		INSERT INTO deployments (project_id, doc_version_id, url, status)
-		VALUES ($1, $2, $3, 'active')
+		INSERT INTO deployments (project_id, doc_version_id, url, custom_domain, status)
+		VALUES ($1, $2, $3, $4, 'active')
 		RETURNING id, project_id, doc_version_id, url, custom_domain, status, created_at
-	`, projectID, dv.ID, url).Scan(
+	`, projectID, dv.ID, url, prevDomain).Scan(
 		&dep.ID, &dep.ProjectID, &dep.DocVersionID, &dep.URL, &dep.CustomDomain, &dep.Status, &dep.CreatedAt,
 	)
 	if err != nil {
@@ -497,6 +539,40 @@ func (s *Store) AcceptOrgInvite(ctx context.Context, token string, userID uuid.U
 		return nil, err
 	}
 	return &org, nil
+}
+
+func (s *Store) SetOrgDocsSubdomain(ctx context.Context, orgID uuid.UUID, subdomain string) (*models.Organization, error) {
+	subdomain = strings.ToLower(strings.TrimSpace(subdomain))
+	subdomain = regexp.MustCompile(`[^a-z0-9-]+`).ReplaceAllString(subdomain, "")
+	subdomain = strings.Trim(subdomain, "-")
+	if subdomain == "" {
+		return nil, fmt.Errorf("invalid subdomain")
+	}
+	var o models.Organization
+	err := s.pool.QueryRow(ctx, `
+		UPDATE organizations
+		SET docs_subdomain = $2, updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, name, slug, plan, COALESCE(docs_subdomain, slug), created_at, updated_at
+	`, orgID, subdomain).Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.DocsSubdomain, &o.CreatedAt, &o.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &o, err
+}
+
+func (s *Store) GetOrganizationByDocsSubdomain(ctx context.Context, subdomain string) (*models.Organization, error) {
+	subdomain = strings.ToLower(strings.TrimSpace(subdomain))
+	var o models.Organization
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, name, slug, plan, COALESCE(docs_subdomain, slug), created_at, updated_at
+		FROM organizations
+		WHERE lower(COALESCE(docs_subdomain, slug)) = $1
+	`, subdomain).Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.DocsSubdomain, &o.CreatedAt, &o.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &o, err
 }
 
 func (s *Store) SetDeploymentCustomDomain(ctx context.Context, projectID uuid.UUID, domain string) (*models.Deployment, error) {

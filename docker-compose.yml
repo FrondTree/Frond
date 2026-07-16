@@ -49,6 +49,9 @@ services:
       STORAGE_PUBLIC_URL: http://localhost:8080/artifacts
       MEILISEARCH_URL: http://meilisearch:7700
       MEILISEARCH_API_KEY: frond-dev-master-key
+      DOCS_PUBLIC_URL: http://localhost:3001
+      DOCS_HOSTED_DOMAIN: frond.dev
+      DOCS_PUBLIC_SCHEME: https
     volumes:
       - api_artifacts:/data/artifacts
     depends_on:

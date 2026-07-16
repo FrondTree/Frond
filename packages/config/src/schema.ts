@@ -3,6 +3,8 @@ import { z } from "zod";
 export const FrondConfigSchema = z.object({
   organization: z.string().min(1),
   project: z.string().min(1),
+  /** Dashboard project UUID — used by `frond docs publish` when --project-id is omitted */
+  projectId: z.string().uuid().optional(),
   docs: z.object({
     title: z.string().min(1),
     url: z.string().url().optional(),

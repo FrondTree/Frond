@@ -151,18 +151,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function connectGitHub() {
-    if (!selectedOrg) return;
-    try {
-      const data = await apiFetch<{ url: string }>(
-        `/v1/orgs/${selectedOrg.slug}/github/connect?format=json&redirect_uri=${encodeURIComponent(window.location.origin + "/dashboard/github")}`,
-      );
-      window.location.href = data.url;
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to start GitHub connect");
-    }
-  }
-
   if (loading) {
     return (
       <div className="space-y-6">
@@ -191,9 +179,11 @@ export default function DashboardPage() {
                 Setup guide
               </Link>
             </Button>
-            <Button variant="outline" disabled={!selectedOrg} onClick={() => void connectGitHub()}>
-              <Github className="h-4 w-4" />
-              Connect GitHub
+            <Button variant="outline" asChild disabled={!selectedOrg}>
+              <Link href="/dashboard/github">
+                <Github className="h-4 w-4" />
+                Connect GitHub
+              </Link>
             </Button>
           </div>
         }

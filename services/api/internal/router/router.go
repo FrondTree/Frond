@@ -63,6 +63,7 @@ func New(d Deps) http.Handler {
 	intelHandler := &handlers.IntelligenceHandler{Store: d.Store, Graph: d.Graph, SearchClient: d.Search}
 	gitlabHandler := handlers.NewGitLabHandler()
 	bitbucketHandler := handlers.NewBitbucketHandler()
+	hostingHandler := &handlers.HostingHandler{Store: d.Store}
 
 	r.Get("/health", handlers.Health)
 	r.Get("/v1/health", handlers.Health)
@@ -92,6 +93,12 @@ func New(d Deps) http.Handler {
 			r.With(middleware.AuthJWT(d.Auth)).Post("/", orgHandler.Create)
 			r.Get("/{slug}", orgHandler.Get)
 
+			r.Route("/{orgSlug}/api-keys", func(r chi.Router) {
+				r.With(middleware.AuthJWT(d.Auth)).Get("/", authHandler.ListAPIKeys)
+				r.With(middleware.AuthJWT(d.Auth)).Post("/", authHandler.CreateOrgAPIKey)
+				r.With(middleware.AuthJWT(d.Auth)).Delete("/{keyID}", authHandler.DeleteAPIKey)
+			})
+
 			r.Route("/{orgSlug}/members", func(r chi.Router) {
 				r.With(middleware.AuthJWT(d.Auth)).Get("/", orgHandler.ListMembers)
 			})
@@ -104,6 +111,11 @@ func New(d Deps) http.Handler {
 				r.Get("/", projectHandler.List)
 				r.With(middleware.AuthJWTOrAPIKey(d.Auth, d.Store)).Post("/", projectHandler.Create)
 				r.Get("/{projectSlug}", projectHandler.Get)
+			})
+
+			r.Route("/{orgSlug}/hosting", func(r chi.Router) {
+				r.With(middleware.AuthJWT(d.Auth)).Get("/", hostingHandler.Get)
+				r.With(middleware.AuthJWT(d.Auth)).Put("/subdomain", hostingHandler.SetSubdomain)
 			})
 
 			// Phase 2: GitHub integration

@@ -5,21 +5,20 @@ import type { Components } from "react-markdown";
 
 function Callout({ type = "info", children }: { type?: string; children: React.ReactNode }) {
   const styles: Record<string, string> = {
-    info: "border-sky-500/40 bg-sky-500/10 text-sky-100",
-    warn: "border-amber-500/40 bg-amber-500/10 text-amber-100",
-    warning: "border-amber-500/40 bg-amber-500/10 text-amber-100",
-    tip: "border-emerald-500/40 bg-emerald-500/10 text-emerald-100",
-    danger: "border-red-500/40 bg-red-500/10 text-red-100",
+    info: "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100",
+    warn: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100",
+    warning: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100",
+    tip: "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100",
+    danger: "border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100",
   };
   return (
-    <aside className={`my-4 rounded-lg border px-4 py-3 text-sm ${styles[type] ?? styles.info}`}>
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">{type}</div>
-      <div className="prose prose-invert prose-sm max-w-none">{children}</div>
+    <aside className={`my-6 rounded-xl border px-4 py-3.5 text-sm ${styles[type] ?? styles.info}`}>
+      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider opacity-70">{type}</div>
+      <div className="prose prose-docs prose-sm max-w-none">{children}</div>
     </aside>
   );
 }
 
-/** Strip MDX-ish JSX tags into markdown-friendly HTML markers the renderer understands. */
 function preprocessMdx(source: string): string {
   let s = source.replace(/^---[\s\S]*?---\n?/, "");
   s = s.replace(
@@ -30,9 +29,7 @@ function preprocessMdx(source: string): string {
   s = s.replace(/<Tabs>[\s\S]*?<\/Tabs>/gi, (block) => {
     const tabs = [...block.matchAll(/<Tab\s+title=["']([^"']+)["']\s*>([\s\S]*?)<\/Tab>/gi)];
     if (!tabs.length) return block;
-    return tabs
-      .map((t) => `\n\n**${t[1]}**\n\n${t[2].trim()}\n`)
-      .join("\n");
+    return tabs.map((t) => `\n\n**${t[1]}**\n\n${t[2].trim()}\n`).join("\n");
   });
   return s;
 }
@@ -68,7 +65,7 @@ function renderWithCallouts(content: string) {
 
 const mdComponents: Components = {
   a: ({ href, children }) => (
-    <a href={href} className="text-emerald-400 underline-offset-2 hover:underline">
+    <a href={href} className="font-medium text-docs-accent underline-offset-4 hover:underline">
       {children}
     </a>
   ),
@@ -76,7 +73,7 @@ const mdComponents: Components = {
     const inline = !className;
     if (inline) {
       return (
-        <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-[0.85em]" {...props}>
+        <code className="rounded-md bg-docs-code px-1.5 py-0.5 font-mono text-[0.85em] text-docs-accent-fg" {...props}>
           {children}
         </code>
       );
@@ -88,18 +85,28 @@ const mdComponents: Components = {
     );
   },
   pre: ({ children }) => (
-    <pre className="overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm">{children}</pre>
+    <pre className="overflow-auto rounded-xl border border-docs-border bg-docs-code p-4 font-mono text-[13px] leading-relaxed text-docs-fg">
+      {children}
+    </pre>
   ),
   table: ({ children }) => (
-    <div className="my-4 overflow-auto">
+    <div className="my-6 overflow-auto rounded-xl border border-docs-border">
       <table className="w-full border-collapse text-sm">{children}</table>
     </div>
   ),
-  th: ({ children }) => <th className="border border-zinc-700 bg-zinc-900 px-3 py-2 text-left">{children}</th>,
-  td: ({ children }) => <td className="border border-zinc-800 px-3 py-2">{children}</td>,
+  th: ({ children }) => (
+    <th className="border-b border-docs-border bg-docs-sidebar px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-docs-muted">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => <td className="border-b border-docs-border px-4 py-2.5 text-docs-fg/90">{children}</td>,
 };
 
 export function MdxContent({ source }: { source: string }) {
   const prepared = preprocessMdx(source);
-  return <div className="prose prose-invert max-w-3xl prose-headings:font-semibold">{renderWithCallouts(prepared)}</div>;
+  return (
+    <article className="prose prose-docs max-w-3xl prose-headings:tracking-tight prose-h1:text-3xl prose-h1:font-semibold prose-h2:mt-10 prose-h2:text-xl">
+      {renderWithCallouts(prepared)}
+    </article>
+  );
 }
